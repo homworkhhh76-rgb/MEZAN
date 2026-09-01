@@ -1,6 +1,6 @@
-const BUILD='745';
+const BUILD='749';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v745-accounting-publish`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v749-single-print-new-receipt`;
 const PAGE_FILES=[
   './index.html',
   './dashboard.html',
@@ -35,7 +35,7 @@ const PAGE_FILES=[
   './admin.html'
 ];
 const ASSET_FILES=[
-  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./pages-bundle.js?v='+BUILD,'./master-admin.js?v='+BUILD,
+  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./pages-bundle-v749.js?v='+BUILD,'./master-admin.js?v='+BUILD,
   './views.js?v='+BUILD,'./admin.js?v='+BUILD,'./pricing.js?v='+BUILD,'./cashier.js?v='+BUILD,'./enterprise.js?v='+BUILD,'./advanced.js?v='+BUILD,'./finance-pro.js?v='+BUILD,'./inventory-restaurant.js?v='+BUILD,'./variants-pro.js?v='+BUILD,'./variant-transfer.js?v='+BUILD,
   './app-icon-192.png?v='+BUILD,'./app-icon-512.png?v='+BUILD,'./app-icon.svg?v='+BUILD,'./brand-logo.png?v='+BUILD,'./barcode-scan.mp3?v='+BUILD,'./manifest.webmanifest?v='+BUILD
 ];

@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><body><pre id=o>WAIT</pre><script>
+window.addEventListener('load',()=>{
+  const s=document.createElement('script'); s.src='app.js'; s.onload=()=>{
+    try{
+      const A=window.AlMezan;
+      A.db={
+        settings:{defaultAccountId:'ACC-1110'},journals:[],purchases:[],shifts:[],
+        sales:[{id:'S1',number:'INV-1',date:'2026-09-01',status:'paid',accountingPosted:false,total:200,tax:0,paid:200,due:0,costTotal:88,payments:[{accountId:'ACC-1110',amount:200}],lines:[{baseQty:1,unitCost:88,costTotal:88,trackStock:true}]}],
+        accounts:[
+          {id:'ACC-1110',type:'asset'},{id:'ACC-1200',type:'asset'},{id:'ACC-1300',type:'asset'},{id:'ACC-1400',type:'asset'},
+          {id:'ACC-2100',type:'liability'},{id:'ACC-2200',type:'liability'},{id:'ACC-2250',type:'liability'},
+          {id:'ACC-4100',type:'revenue'},{id:'ACC-5100',type:'expense'}
+        ]
+      };
+      const r=A.financialSummary('2026-09-01','2026-09-01');
+      document.getElementById('o').textContent=JSON.stringify(r);
+    }catch(e){document.getElementById('o').textContent='ERR '+e.stack}
+  }; s.onerror=e=>document.getElementById('o').textContent='LOADERR'; document.body.appendChild(s);
+});
+</script></body>
