@@ -1486,4 +1486,4 @@ try{
 
 }catch(e){console.error('[AlMeezan] failed loading variant-transfer.js',e);}
 
-window.__ALMEZAN_PAGES_BUNDLE__='739';
+window.__ALMEZAN_PAGES_BUNDLE__='740';

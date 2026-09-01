@@ -1,10 +1,11 @@
 (function(){
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch';
-  const APP_BUILD='7.39',APP_BUILD_TOKEN='739',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.40',APP_BUILD_TOKEN='740',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const PAGE_FILES={dashboard:'dashboard.html',cashier:'cashier.html',sales:'sales.html',purchases:'purchases.html',debts:'debts.html',installments:'installments.html',products:'products.html',stock:'stock.html',units:'units.html',transfers:'transfers.html',barcodes:'barcodes.html',accounts:'accounts.html',vouchers:'vouchers.html',cheques:'cheques.html',journals:'journals.html',expenses:'expenses.html',reports:'reports.html',customers:'customers.html','customer-groups':'customer-groups.html','price-groups':'price-groups.html',suppliers:'suppliers.html',representatives:'representatives.html',messaging:'messaging.html',branches:'branches.html',warehouses:'warehouses.html',employees:'employees.html',audit:'audit.html',settings:'settings.html'};
   const PAGE_BY_FILE=Object.fromEntries(Object.entries(PAGE_FILES).map(([view,file])=>[file,view]));
   function entryPageView(){const explicit=String(window.ALMEZAN_PAGE_VIEW||'').trim();if(explicit&&PAGE_FILES[explicit])return explicit;const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();return PAGE_BY_FILE[file]||'dashboard'}
+  function routeViewFromLocation(){const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();if(PAGE_BY_FILE[file])return PAGE_BY_FILE[file];let h='';try{h=decodeURIComponent(location.hash.replace(/^#/,''))}catch(_){h=location.hash.slice(1)}h=String(h||'').trim();return PAGE_FILES[h]?h:(String(window.ALMEZAN_PAGE_VIEW||'').trim()||state?.view||'dashboard')}
   function pageHref(view){const file=PAGE_FILES[view];return file?`./${file}`:`./index.html#${encodeURIComponent(view)}`}
   const ENTRY_VIEW=entryPageView();
   const runtime=()=>window.AlMezanActivation?.readRuntime?.()||null;
@@ -331,14 +332,14 @@ function enhanceSelects(root=document){
     if(!view)return;
     state.view=view;
     const file=PAGE_FILES[view];
+    // v7.40: الصفحات لها ملفات HTML حقيقية للروابط/التحديث المباشر،
+    // لكن التنقل داخل البرنامج لا يعيد تحميل المستند ولا يعيد فحص تسجيل الدخول.
+    // هكذا تبقى الجلسة والبيانات والواجهة نفسها مفتوحة وتتحول الصفحة فوراً.
     if(file){
-      const current=(location.pathname.split('/').pop()||'index.html').toLowerCase();
-      if(current!==file.toLowerCase()){
-        // كل صفحة لها ملف HTML حقيقي مستقل. هذا يمنع GitHub Pages من إعادة المستخدم للرئيسية.
-        location.assign(new URL(`./${file}`,document.baseURI).href);
-        return;
-      }
-      try{if(location.hash)history.replaceState({almezanView:view},'',`${location.pathname}${location.search}`)}catch(_){}
+      try{
+        const target=new URL(`./${file}`,document.baseURI);
+        if(location.pathname!==target.pathname||location.search)history.pushState({almezanView:view},'',target.href);
+      }catch(_){}
       renderCurrent(view);
       return;
     }
@@ -376,8 +377,8 @@ function enhanceSelects(root=document){
   function renderCurrent(forcedView=''){
     let printHash='';try{printHash=decodeURIComponent(location.hash.replace(/^#/,''))}catch(_){printHash=location.hash.slice(1)}printHash=String(printHash||'').trim();
     if(printHash.startsWith('print-')){state.view=printHash;const fn=state.views.print;fn?.(printHash);return}
-    const user=currentUser();if(!user){showLogin();return}showApp();
-    let view=String(forcedView||printHash||state.view||'dashboard').trim()||'dashboard';
+    let user=currentUser();if(!user&&getSession()&&runtime()){restoreActivationAccountFromRuntime();user=currentUser()}if(!user){showLogin();return}showApp();
+    let view=String(forcedView||printHash||routeViewFromLocation()||state.view||'dashboard').trim()||'dashboard';
     const navItem=NAV.flatMap(g=>g.items).find(i=>i[0]===view);
     if(navItem&&!has(navItem[3])){routeError(view,'هذا الحساب لا يملك صلاحية فتح هذه الصفحة.');return}
     if(view==='restaurant-tables'&&!db.settings.restaurantMode){routeError(view,'فعّل وضع المطاعم من الإعدادات لفتح هذه الصفحة.');return}
@@ -401,7 +402,16 @@ function enhanceSelects(root=document){
   }
   function writeActivationSession(payload,user){
     const session={mode:'activation-file',userId:user.id,loginAt:now(),companyId:String(payload.companyId||payload.tenantId||''),tenantId:String(payload.companyId||payload.tenantId||''),companyKey:String(payload.companyKey||payload.activationKey||''),companyName:payload.companyName||db.company.name,fileId:payload.fileId,type:payload.type,status:payload.status||'active',plan:payload.plan||'lifetime',expiresAt:payload.expiresAt||''};
-    sessionStorage.removeItem(SESSION_KEY);localStorage.setItem(SESSION_KEY,JSON.stringify(session));return session
+    const raw=JSON.stringify(session);localStorage.setItem(SESSION_KEY,raw);sessionStorage.setItem(SESSION_KEY,raw);return session
+  }
+  function restoreActivationAccountFromRuntime(){
+    const session=getSession(),rt=runtime();
+    if(!session||!rt?.account||String(rt.account.id||'')!==String(session.userId||''))return false;
+    if(db.employees.some(e=>e.id===session.userId&&e.active!==false))return true;
+    try{
+      ensureActivationAccount({type:session.type||rt.type,companyId:rt.companyId,tenantId:rt.tenantId,companyName:rt.companyName,permissions:rt.permissions||rt.account.permissions||[],account:rt.account});
+      return !!db.employees.find(e=>e.id===session.userId&&e.active!==false)
+    }catch(_){return false}
   }
   async function loginWithActivationFile(file){
     const activation=window.AlMezanActivation;if(!activation)throw new Error('وحدة التفعيل غير جاهزة.');
@@ -421,7 +431,7 @@ function enhanceSelects(root=document){
   }
   function updateSyncUi(detail={}){const btn=$('#syncNowBtn'),badge=$('#syncPendingBadge');if(!btn)return;const pending=Number(detail.pending??window.AlMezanSync?.pendingCount?.()??0);btn.classList.toggle('is-syncing',detail.busy===true||detail.state==='syncing');btn.classList.toggle('sync-error',detail.state==='error');btn.classList.toggle('sync-ok',detail.state==='success'&&pending===0);btn.title=detail.state==='syncing'?'جاري المزامنة...':pending?`مزامنة الآن — ${pending} تغيير معلق`:'مزامنة الآن';if(badge){badge.textContent=pending>99?'99+':String(pending);badge.classList.toggle('show',pending>0)}}
   async function resumeOfflineRuntime(){
-    const rt=runtime(),session=getSession();if(!rt||!session||!currentUser())return false;await window.AlMezanSync?.initialize?.(db);renderCurrent();window.AlMezanSync?.syncNow?.({manual:false}).catch(()=>{});
+    const rt=runtime(),session=getSession();if(!rt||!session)return false;if(!currentUser())restoreActivationAccountFromRuntime();if(!currentUser())return false;await window.AlMezanSync?.initialize?.(db);const entry=routeViewFromLocation();state.view=entry;renderCurrent(entry);window.AlMezanSync?.syncNow?.({manual:false}).catch(()=>{});
     if(navigator.onLine!==false){window.AlMezanActivation?.verifyPayloadRemote?.({...rt,account:rt.account,database:window.AlMezanActivation.readDatabaseAccess(rt.companyId)||rt.database}).catch(err=>{const msg=String(err?.message||err);if(/إيقاف|انتهت|أحدث|غير موجود|لا يطابق|غير متاح/.test(msg)){localStorage.removeItem(SESSION_KEY);sessionStorage.removeItem(SESSION_KEY);window.AlMezanActivation.clearRuntime();showLogin();toast(msg,'error')}})}
     return true
   }
@@ -433,7 +443,7 @@ function enhanceSelects(root=document){
 
   const A=window.AlMezan={get db(){return db},set db(v){db=v},state,$,$$,esc,num,clone,today,now,uid,hash,I,injectIcons,PERMISSIONS,ALL_PERMISSIONS,NAV,PAGE_META,saveDB,setDB,replaceDBFromSync,switchTenant,hasTenantLocalData,getSession,atomicMutation,currentUser,installApp,installStatus,canInstallApp,has,audit,nextNo,money,dateFmt,branchName,warehouseName,stockQty,totalStock,effectiveProductStock,adjustStock,updateWeightedAverageCost,productUnit,unitBreakdown,accountBalance,paymentAccounts,fxRate,validateOpenFinancialDate,normalizeJournalLines,validateJournalLines,postJournal,persistCart,options,pageHead,emptyState,table,badge,toast,openModal,closeModal,confirmDialog,downloadBlob,exportExcel,tableExportData,exportTableExcel,exportTablePDF,parseCSV,setFilePicker,enhanceSelects,blankZeroNumbers,registerView,registerAction,navigate,renderCurrent,applyTheme,playBarcodeSound};
 
-  registerAction('retry-view',b=>{const v=b.dataset.view||state.view;viewRecovery.delete(v);recoverMissingView(v)||renderCurrent(v)});registerAction('close-modal',closeModal);registerAction('export-table-pdf',b=>exportTablePDF(b));registerAction('export-table-excel',b=>exportTableExcel(b));registerAction('table-page',b=>{const block=b.closest('.data-table-block');if(!block)return;const pager=$('.table-pagination',block),pages=Number(pager?.dataset.pages)||1,total=Number(b.dataset.total)||0,size=Number(b.dataset.size)||50,page=Math.max(1,Math.min(pages,Number(b.dataset.page)||1));$$('tbody tr[data-table-page]',block).forEach(r=>r.hidden=Number(r.dataset.tablePage)!==page);$$('.page-button',block).forEach(x=>x.classList.toggle('active',Number(x.dataset.page)===page));if(pager)pager.dataset.current=String(page);const prev=$('.page-prev',block),next=$('.page-next',block);if(prev){prev.dataset.page=String(Math.max(1,page-1));prev.disabled=page<=1}if(next){next.dataset.page=String(Math.min(pages,page+1));next.disabled=page>=pages}const summary=$('.pagination-summary',block),start=(page-1)*size+1,end=Math.min(page*size,total);if(summary)summary.textContent=`عرض ${start}–${end} من ${total} سجل`;block.scrollIntoView({behavior:'smooth',block:'start'})});registerAction('open-mobile-menu',()=>{$('#sidebar').classList.add('open');$('#sidebarOverlay').classList.add('open')});registerAction('search-go',b=>{closeModal();navigate(b.dataset.view)});registerAction('print-invoice',b=>window.AlMezanBluetoothPrinter?.printInvoiceById?.(b.dataset.id)||window.open(`./index.html?v=739#print-invoice/${b.dataset.id}`,'_blank'));registerAction('toggle-theme',()=>{db.settings.theme=db.settings.theme==='dark'?'light':'dark';saveDB();applyTheme();closeModal();renderCurrent()});registerAction('logout',()=>{$('#logoutBtn').click()});
+  registerAction('retry-view',b=>{const v=b.dataset.view||state.view;viewRecovery.delete(v);recoverMissingView(v)||renderCurrent(v)});registerAction('close-modal',closeModal);registerAction('export-table-pdf',b=>exportTablePDF(b));registerAction('export-table-excel',b=>exportTableExcel(b));registerAction('table-page',b=>{const block=b.closest('.data-table-block');if(!block)return;const pager=$('.table-pagination',block),pages=Number(pager?.dataset.pages)||1,total=Number(b.dataset.total)||0,size=Number(b.dataset.size)||50,page=Math.max(1,Math.min(pages,Number(b.dataset.page)||1));$$('tbody tr[data-table-page]',block).forEach(r=>r.hidden=Number(r.dataset.tablePage)!==page);$$('.page-button',block).forEach(x=>x.classList.toggle('active',Number(x.dataset.page)===page));if(pager)pager.dataset.current=String(page);const prev=$('.page-prev',block),next=$('.page-next',block);if(prev){prev.dataset.page=String(Math.max(1,page-1));prev.disabled=page<=1}if(next){next.dataset.page=String(Math.min(pages,page+1));next.disabled=page>=pages}const summary=$('.pagination-summary',block),start=(page-1)*size+1,end=Math.min(page*size,total);if(summary)summary.textContent=`عرض ${start}–${end} من ${total} سجل`;block.scrollIntoView({behavior:'smooth',block:'start'})});registerAction('open-mobile-menu',()=>{$('#sidebar').classList.add('open');$('#sidebarOverlay').classList.add('open')});registerAction('search-go',b=>{closeModal();navigate(b.dataset.view)});registerAction('print-invoice',b=>window.AlMezanBluetoothPrinter?.printInvoiceById?.(b.dataset.id)||window.open(`./index.html?v=740#print-invoice/${b.dataset.id}`,'_blank'));registerAction('toggle-theme',()=>{db.settings.theme=db.settings.theme==='dark'?'light':'dark';saveDB();applyTheme();closeModal();renderCurrent()});registerAction('logout',()=>{$('#logoutBtn').click()});
 
   function init(){
     window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;window.dispatchEvent(new CustomEvent('almezan:pwa-status',{detail:installStatus()}))});window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;appInstalled=true;window.dispatchEvent(new CustomEvent('almezan:pwa-status',{detail:installStatus()}))});
@@ -450,7 +460,7 @@ function enhanceSelects(root=document){
     $('#globalSearchBtn').addEventListener('click',globalSearch);$('#notificationBtn').addEventListener('click',showAlerts);$('#userMenuBtn').addEventListener('click',userMenu);$('#syncNowBtn')?.addEventListener('click',()=>window.AlMezanSync?.syncNow?.({manual:true,force:true}));window.addEventListener('almezan:sync-status',e=>updateSyncUi(e.detail||{}));updateSyncUi();
     document.addEventListener('pointerover',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch')showNavTooltip(b)});document.addEventListener('pointerout',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch'&&!b.contains(e.relatedTarget))hideNavTooltip()});document.addEventListener('pointerdown',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType==='touch')showNavTooltip(b,1300)});
     document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))closeCustomSelects();const view=e.target.closest('[data-view]');if(view&&!view.dataset.action){const side=view.closest('#sidebar');e.preventDefault();if(side&&(window.innerWidth>=901||document.documentElement.classList.contains('tablet-desktop'))&&!side.classList.contains('open')){state.keepSidebarOpenOnce=true;sessionStorage.setItem('almezan_sidebar_open_once','1');navigate(view.dataset.view);hideNavTooltip();return}navigate(view.dataset.view);if(side){closeSidebarUI();hideNavTooltip()}return}const btn=e.target.closest('[data-action]');if(!btn)return;const fn=state.actions[btn.dataset.action];if(fn){e.preventDefault();fn(btn,e)}});
-    let lastViewportWidth=window.innerWidth;window.addEventListener('scroll',e=>{const open=$('.custom-select.open');if(!open)return;const active=document.activeElement;if(active&&open.contains(active)&&active.matches('input[type=search]')){open._repositionSelectMenu?.();return}if(e.target&&open.contains(e.target))return;closeCustomSelects()},true);window.addEventListener('resize',()=>{const widthChanged=Math.abs(window.innerWidth-lastViewportWidth)>24;lastViewportWidth=window.innerWidth;const open=$('.custom-select.open');if(!open)return;if(widthChanged)closeCustomSelects();else open._repositionSelectMenu?.()});window.visualViewport?.addEventListener('resize',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.visualViewport?.addEventListener('scroll',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.addEventListener('hashchange',renderCurrent);window.addEventListener('popstate',renderCurrent);window.addEventListener('online',()=>{$('#offlineNotice').hidden=true});window.addEventListener('offline',()=>{$('#offlineNotice').hidden=false});$('#offlineNotice').hidden=navigator.onLine;
+    let lastViewportWidth=window.innerWidth;window.addEventListener('scroll',e=>{const open=$('.custom-select.open');if(!open)return;const active=document.activeElement;if(active&&open.contains(active)&&active.matches('input[type=search]')){open._repositionSelectMenu?.();return}if(e.target&&open.contains(e.target))return;closeCustomSelects()},true);window.addEventListener('resize',()=>{const widthChanged=Math.abs(window.innerWidth-lastViewportWidth)>24;lastViewportWidth=window.innerWidth;const open=$('.custom-select.open');if(!open)return;if(widthChanged)closeCustomSelects();else open._repositionSelectMenu?.()});window.visualViewport?.addEventListener('resize',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.visualViewport?.addEventListener('scroll',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.addEventListener('hashchange',()=>renderCurrent(routeViewFromLocation()));window.addEventListener('popstate',()=>{const v=routeViewFromLocation();state.view=v;renderCurrent(v)});window.addEventListener('online',()=>{$('#offlineNotice').hidden=true});window.addEventListener('offline',()=>{$('#offlineNotice').hidden=false});$('#offlineNotice').hidden=navigator.onLine;
     if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register(`./service-worker.js?v=${APP_BUILD_TOKEN}`,{scope:'./',updateViaCache:'none'}).catch(()=>{});
     resumeOfflineRuntime().then(ok=>{if(!ok)renderCurrent()}).catch(()=>renderCurrent());
   }
