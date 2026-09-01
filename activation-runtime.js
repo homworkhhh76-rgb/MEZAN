@@ -105,6 +105,17 @@
 
   function accountPath(payload){const companyId=encodeURIComponent(String(payload.companyId||payload.tenantId||''));const base=`almezan/companies/${companyId}`;if(payload.type==='company-manager')return `${base}/access/company`;return `${base}/d/employees/${encodeURIComponent(String(payload.account?.id||''))}`}
   function unwrapRecord(value){if(value&&typeof value==='object'&&Object.prototype.hasOwnProperty.call(value,'v'))return value.deleted?null:value.v;return value}
+  async function verifyCompanyAccessRemote(payload){
+    const db=payload?.database||readDatabaseAccess(payload?.companyId)||{},companyId=String(payload?.companyId||payload?.tenantId||'');
+    if(!companyId||!db.databaseURL||!db.authToken)throw new Error('بيانات قاعدة الشركة غير متاحة.');
+    const base=`almezan/companies/${encodeURIComponent(companyId)}`,access=unwrapRecord(await readExact(db,`${base}/access/company`,{ensureSchema:true}));
+    if(!access)throw new Error('مفتاح الشركة غير مسجل في قاعدة الشركة.');
+    if(String(access.companyKey||'').toUpperCase()!==String(payload.companyKey||payload.activationKey||'').toUpperCase())throw new Error('ملف التفعيل لا يطابق مفتاح الشركة.');
+    if(access.status!=='active')throw new Error('تم إيقاف مفتاح الشركة من الإدارة العامة.');
+    if(access.endAt&&Date.now()>=new Date(access.endAt).getTime())throw new Error('انتهت مدة تفعيل الشركة.');
+    try{markVerified(payload,access)}catch(_){}
+    return {access,online:true};
+  }
   async function verifyPayloadRemote(payload){
     const db=payload.database||readDatabaseAccess(payload.companyId)||{},companyId=String(payload.companyId||payload.tenantId||'');if(!companyId||!db.databaseURL||!db.authToken)throw new Error('ملف التفعيل لا يحتوي على قاعدة شركة صالحة.');
     const base=`almezan/companies/${encodeURIComponent(companyId)}`,access=unwrapRecord(await readExact(db,`${base}/access/company`,{ensureSchema:true}));
@@ -136,5 +147,5 @@
   function buildRolePayload(type,account,extra={}){const rt=readRuntime()||{};return{type,activationKey:rt.companyKey||rt.activationKey,fileId:`${type}_${account?.id||Date.now()}_${account?.authVersion||''}`,companyId:rt.companyId,tenantId:rt.companyId,companyKey:rt.companyKey||rt.activationKey,companyName:rt.companyName||'الشركة',status:rt.status||'active',plan:rt.plan||'lifetime',expiresAt:rt.expiresAt||'',rootPath:rt.rootPath||'almezan/companies',database:readDatabaseAccess(rt.companyId)||rt.database||{},permissions:account?.permissions||[],account:clone(account),...extra}}
   async function prepareVerifiedRoleFile(type,account,fileName){const payload=buildRolePayload(type,account);if(window.AlMezanSync){const result=await window.AlMezanSync.syncNow({manual:false,force:true});if(result?.remaining>0||result?.error)throw new Error('الحساب محفوظ محلياً لكن لم يصل إلى قاعدة الشركة بعد. شغّل المزامنة ثم أعد المحاولة.')}await verifyPayloadRemote(payload);return downloadActivationFile(payload,fileName)}
 
-  window.AlMezanActivation={version:1,makeFile,downloadActivationFile,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
+  window.AlMezanActivation={version:1,makeFile,downloadActivationFile,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,verifyCompanyAccessRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
 })();

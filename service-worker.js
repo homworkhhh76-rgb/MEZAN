@@ -1,6 +1,6 @@
-const BUILD='740';
+const BUILD='742';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v740-inapp-physical-routes`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v742-thermal-template-invoice-controls`;
 const PAGE_FILES=[
   './index.html',
   './dashboard.html',
