@@ -134,9 +134,9 @@
     while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}if(pos%3600<chunk)await new Promise(r=>setTimeout(r,2))}
   }
   async function printInvoice(sale){
-    if(!sale)throw new Error('الفاتورة غير موجودة.');const s=settings();if(s.printSize==='a4'||s.printerConnection!=='bluetooth'){window.open(`./index.html?v=736#print-invoice/${sale.id}`,'_blank');return false}
-    if(!support()){A.toast?.('الطباعة بالبلوتوث غير مدعومة في هذا المتصفح؛ سيتم فتح الطباعة العادية.','warning',5000);window.open(`./index.html?v=736#print-invoice/${sale.id}`,'_blank');return false}
-    state.printing=true;emit();try{if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const canvas=await receiptCanvas(sale),bytes=rasterBytes(canvas);await writeBytes(bytes);A.toast?.(`تمت طباعة ${sale.number} على ${state.device?.name||'طابعة البلوتوث'}`,'success');return true}catch(e){console.error(e);A.toast?.(`${e.message||e} — تم فتح الطباعة العادية كبديل.`,'warning',6000);window.open(`./index.html?v=736#print-invoice/${sale.id}`,'_blank');return false}finally{state.printing=false;emit()}
+    if(!sale)throw new Error('الفاتورة غير موجودة.');const s=settings();if(s.printSize==='a4'||s.printerConnection!=='bluetooth'){window.open(`./index.html?v=737#print-invoice/${sale.id}`,'_blank');return false}
+    if(!support()){A.toast?.('الطباعة بالبلوتوث غير مدعومة في هذا المتصفح؛ سيتم فتح الطباعة العادية.','warning',5000);window.open(`./index.html?v=737#print-invoice/${sale.id}`,'_blank');return false}
+    state.printing=true;emit();try{if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const canvas=await receiptCanvas(sale),bytes=rasterBytes(canvas);await writeBytes(bytes);A.toast?.(`تمت طباعة ${sale.number} على ${state.device?.name||'طابعة البلوتوث'}`,'success');return true}catch(e){console.error(e);A.toast?.(`${e.message||e} — تم فتح الطباعة العادية كبديل.`,'warning',6000);window.open(`./index.html?v=737#print-invoice/${sale.id}`,'_blank');return false}finally{state.printing=false;emit()}
   }
   function printInvoiceById(id){const sale=D()?.sales?.find(x=>x.id===id);return printInvoice(sale)}
   async function printTest(){

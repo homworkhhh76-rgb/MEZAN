@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch';
-  const APP_BUILD='7.36',APP_BUILD_TOKEN='736',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.37',APP_BUILD_TOKEN='737',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const runtime=()=>window.AlMezanActivation?.readRuntime?.()||null;
   const tenantId=()=>String(runtime()?.companyId||runtime()?.tenantId||'').trim();
   const scopedKey=(base,id=tenantId())=>id?`${base}::${encodeURIComponent(id)}`:base;
@@ -330,22 +330,23 @@ function enhanceSelects(root=document){
     try{history.pushState({almezanView:view},'',`${location.pathname}${location.search}${hash}`);renderCurrent()}
     catch(_){location.hash=hash}
   }
-  async function repairGitHubRoute(view){
-    if(!IS_GITHUB_PAGES||!navigator.onLine||!('serviceWorker'in navigator))return false;
-    const guard=`almezan-gh-route-repair-${APP_BUILD_TOKEN}-${view}`;
-    if(sessionStorage.getItem(guard)==='1')return false;
-    sessionStorage.setItem(guard,'1');
-    try{
-      const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.filter(r=>{try{return new URL(r.scope).pathname.startsWith(new URL('./',location.href).pathname)}catch(_){return true}}).map(r=>r.unregister()));
-      const keys=await caches.keys(),basePath=new URL('./',location.href).pathname;
-      for(const key of keys.filter(k=>k.startsWith('almezan-pro-'))){
-        const cache=await caches.open(key),requests=await cache.keys();
-        await Promise.all(requests.filter(r=>{try{return new URL(r.url).pathname.startsWith(basePath)}catch(_){return false}}).map(r=>cache.delete(r)));
-        if((await cache.keys()).length===0)await caches.delete(key)
-      }
-    }catch(_){}
-    const u=new URL(location.href);u.searchParams.set('_build',APP_BUILD_TOKEN);u.hash='#'+view;location.replace(u.href);return true
+  const VIEW_MODULE={
+    dashboard:'views.js',products:'views.js',units:'views.js',stock:'views.js',sales:'views.js',purchases:'views.js',transfers:'views.js',customers:'views.js',suppliers:'views.js',representatives:'views.js',debts:'views.js',vouchers:'views.js',cheques:'views.js',expenses:'views.js',
+    accounts:'admin.js',journals:'admin.js',reports:'admin.js',branches:'admin.js',warehouses:'admin.js',employees:'admin.js',audit:'admin.js',settings:'admin.js',barcodes:'admin.js',
+    'customer-groups':'pricing.js','price-groups':'pricing.js',cashier:'cashier.js',installments:'advanced.js',messaging:'advanced.js'
+  };
+  const viewRecovery=new Set();
+  function recoverMissingView(view){
+    const file=VIEW_MODULE[view];
+    if(!file||viewRecovery.has(view))return false;
+    viewRecovery.add(view);
+    const script=document.createElement('script');
+    script.src=`./${file}?v=${APP_BUILD_TOKEN}&recover=${Date.now()}`;
+    script.async=true;
+    script.onload=()=>{viewRecovery.delete(view);if(state.views[view])renderCurrent()};
+    script.onerror=()=>viewRecovery.delete(view);
+    document.head.appendChild(script);
+    return true
   }
   function closeSidebarUI(){const side=$('#sidebar'),overlay=$('#sidebarOverlay');side?.classList.remove('open');overlay?.classList.remove('open');document.documentElement.classList.remove('sidebar-open')}
   let navTooltipTimer=null;
@@ -360,7 +361,8 @@ function enhanceSelects(root=document){
     if(navItem&&!has(navItem[3]))view='dashboard';
     else if(view==='restaurant-tables'&&!db.settings.restaurantMode)view='dashboard';
     else if(!state.views[view]){
-      if(navItem&&IS_GITHUB_PAGES){repairGitHubRoute(view);const ws=$('#workspace');if(ws)ws.innerHTML=`<div class="empty-state"><div class="empty-icon">${I('refresh',28)}</div><h3>جاري تحديث ملفات الصفحة</h3><p>يتم إصلاح نسخة GitHub Pages وفتح ${esc(PAGE_META[view]?.[0]||view)} تلقائياً.</p></div>`;return}
+      // Never redirect a GitHub Pages menu click back to dashboard. Retry the view module silently.
+      if(navItem&&recoverMissingView(view))return;
       view='dashboard'
     }
     state.view=view;const meta=PAGE_META[view]||[view,''];$('#pageTitle').textContent=meta[0];$('#pageSubtitle').textContent=meta[1];renderNav();updateAlerts();const ws=$('#workspace');ws.classList.toggle('cashier-workspace',view==='cashier');ws.classList.toggle('dashboard-workspace',view==='dashboard');ws.innerHTML='';state.views[view]?.(ws);if(state.financialPreviewMode){ws.insertAdjacentHTML('afterbegin',`<div class="financial-preview-banner">${I('eye',18)}<div><b>وضع معاينة فقط — ${esc(state.financialPreviewLabel||'سنة مالية مؤرشفة')}</b><small>يمكنك التنقل في النظام وعرض البيانات، لكن جميع عمليات الإضافة والتعديل والحذف والترحيل معطلة.</small></div><button type="button" class="btn btn-primary btn-sm" data-action="exit-financial-preview">العودة للسنة الحالية</button></div>`);ws.querySelectorAll('input,select,textarea').forEach(el=>{el.disabled=true});const allowed=/^(exit-financial-preview|enter-financial-year|preview-financial-year|view-|export-|table-page|shift-zreport|close-modal|open-mobile-menu)$/;ws.querySelectorAll('[data-action]').forEach(el=>{if(!allowed.test(el.dataset.action||''))el.disabled=true});}injectIcons(ws);enhanceSelects(document);blankZeroNumbers(ws);renderMobileNav();ws.focus({preventScroll:true});if(state.keepSidebarOpenOnce&&(window.innerWidth>=901||document.documentElement.classList.contains('tablet-desktop'))){state.keepSidebarOpenOnce=false;const side=$('#sidebar'),overlay=$('#sidebarOverlay');side?.classList.add('open');overlay?.classList.add('open');document.documentElement.classList.add('sidebar-open')}else closeSidebarUI()
@@ -410,7 +412,7 @@ function enhanceSelects(root=document){
 
   const A=window.AlMezan={get db(){return db},set db(v){db=v},state,$,$$,esc,num,clone,today,now,uid,hash,I,injectIcons,PERMISSIONS,ALL_PERMISSIONS,NAV,PAGE_META,saveDB,setDB,replaceDBFromSync,switchTenant,hasTenantLocalData,getSession,atomicMutation,currentUser,installApp,installStatus,canInstallApp,has,audit,nextNo,money,dateFmt,branchName,warehouseName,stockQty,totalStock,effectiveProductStock,adjustStock,updateWeightedAverageCost,productUnit,unitBreakdown,accountBalance,paymentAccounts,fxRate,validateOpenFinancialDate,normalizeJournalLines,validateJournalLines,postJournal,persistCart,options,pageHead,emptyState,table,badge,toast,openModal,closeModal,confirmDialog,downloadBlob,exportExcel,tableExportData,exportTableExcel,exportTablePDF,parseCSV,setFilePicker,enhanceSelects,blankZeroNumbers,registerView,registerAction,navigate,renderCurrent,applyTheme,playBarcodeSound};
 
-  registerAction('close-modal',closeModal);registerAction('export-table-pdf',b=>exportTablePDF(b));registerAction('export-table-excel',b=>exportTableExcel(b));registerAction('table-page',b=>{const block=b.closest('.data-table-block');if(!block)return;const pager=$('.table-pagination',block),pages=Number(pager?.dataset.pages)||1,total=Number(b.dataset.total)||0,size=Number(b.dataset.size)||50,page=Math.max(1,Math.min(pages,Number(b.dataset.page)||1));$$('tbody tr[data-table-page]',block).forEach(r=>r.hidden=Number(r.dataset.tablePage)!==page);$$('.page-button',block).forEach(x=>x.classList.toggle('active',Number(x.dataset.page)===page));if(pager)pager.dataset.current=String(page);const prev=$('.page-prev',block),next=$('.page-next',block);if(prev){prev.dataset.page=String(Math.max(1,page-1));prev.disabled=page<=1}if(next){next.dataset.page=String(Math.min(pages,page+1));next.disabled=page>=pages}const summary=$('.pagination-summary',block),start=(page-1)*size+1,end=Math.min(page*size,total);if(summary)summary.textContent=`عرض ${start}–${end} من ${total} سجل`;block.scrollIntoView({behavior:'smooth',block:'start'})});registerAction('open-mobile-menu',()=>{$('#sidebar').classList.add('open');$('#sidebarOverlay').classList.add('open')});registerAction('search-go',b=>{closeModal();navigate(b.dataset.view)});registerAction('print-invoice',b=>window.AlMezanBluetoothPrinter?.printInvoiceById?.(b.dataset.id)||window.open(`./index.html?v=736#print-invoice/${b.dataset.id}`,'_blank'));registerAction('toggle-theme',()=>{db.settings.theme=db.settings.theme==='dark'?'light':'dark';saveDB();applyTheme();closeModal();renderCurrent()});registerAction('logout',()=>{$('#logoutBtn').click()});
+  registerAction('close-modal',closeModal);registerAction('export-table-pdf',b=>exportTablePDF(b));registerAction('export-table-excel',b=>exportTableExcel(b));registerAction('table-page',b=>{const block=b.closest('.data-table-block');if(!block)return;const pager=$('.table-pagination',block),pages=Number(pager?.dataset.pages)||1,total=Number(b.dataset.total)||0,size=Number(b.dataset.size)||50,page=Math.max(1,Math.min(pages,Number(b.dataset.page)||1));$$('tbody tr[data-table-page]',block).forEach(r=>r.hidden=Number(r.dataset.tablePage)!==page);$$('.page-button',block).forEach(x=>x.classList.toggle('active',Number(x.dataset.page)===page));if(pager)pager.dataset.current=String(page);const prev=$('.page-prev',block),next=$('.page-next',block);if(prev){prev.dataset.page=String(Math.max(1,page-1));prev.disabled=page<=1}if(next){next.dataset.page=String(Math.min(pages,page+1));next.disabled=page>=pages}const summary=$('.pagination-summary',block),start=(page-1)*size+1,end=Math.min(page*size,total);if(summary)summary.textContent=`عرض ${start}–${end} من ${total} سجل`;block.scrollIntoView({behavior:'smooth',block:'start'})});registerAction('open-mobile-menu',()=>{$('#sidebar').classList.add('open');$('#sidebarOverlay').classList.add('open')});registerAction('search-go',b=>{closeModal();navigate(b.dataset.view)});registerAction('print-invoice',b=>window.AlMezanBluetoothPrinter?.printInvoiceById?.(b.dataset.id)||window.open(`./index.html?v=737#print-invoice/${b.dataset.id}`,'_blank'));registerAction('toggle-theme',()=>{db.settings.theme=db.settings.theme==='dark'?'light':'dark';saveDB();applyTheme();closeModal();renderCurrent()});registerAction('logout',()=>{$('#logoutBtn').click()});
 
   function init(){
     window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;window.dispatchEvent(new CustomEvent('almezan:pwa-status',{detail:installStatus()}))});window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;appInstalled=true;window.dispatchEvent(new CustomEvent('almezan:pwa-status',{detail:installStatus()}))});
@@ -428,7 +430,7 @@ function enhanceSelects(root=document){
     document.addEventListener('pointerover',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch')showNavTooltip(b)});document.addEventListener('pointerout',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch'&&!b.contains(e.relatedTarget))hideNavTooltip()});document.addEventListener('pointerdown',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType==='touch')showNavTooltip(b,1300)});
     document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))closeCustomSelects();const view=e.target.closest('[data-view]');if(view&&!view.dataset.action){const side=view.closest('#sidebar');e.preventDefault();if(side&&(window.innerWidth>=901||document.documentElement.classList.contains('tablet-desktop'))&&!side.classList.contains('open')){state.keepSidebarOpenOnce=true;navigate(view.dataset.view);hideNavTooltip();return}navigate(view.dataset.view);if(side){closeSidebarUI();hideNavTooltip()}return}const btn=e.target.closest('[data-action]');if(!btn)return;const fn=state.actions[btn.dataset.action];if(fn){e.preventDefault();fn(btn,e)}});
     let lastViewportWidth=window.innerWidth;window.addEventListener('scroll',e=>{const open=$('.custom-select.open');if(!open)return;const active=document.activeElement;if(active&&open.contains(active)&&active.matches('input[type=search]')){open._repositionSelectMenu?.();return}if(e.target&&open.contains(e.target))return;closeCustomSelects()},true);window.addEventListener('resize',()=>{const widthChanged=Math.abs(window.innerWidth-lastViewportWidth)>24;lastViewportWidth=window.innerWidth;const open=$('.custom-select.open');if(!open)return;if(widthChanged)closeCustomSelects();else open._repositionSelectMenu?.()});window.visualViewport?.addEventListener('resize',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.visualViewport?.addEventListener('scroll',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.addEventListener('hashchange',renderCurrent);window.addEventListener('popstate',renderCurrent);window.addEventListener('online',()=>{$('#offlineNotice').hidden=true});window.addEventListener('offline',()=>{$('#offlineNotice').hidden=false});$('#offlineNotice').hidden=navigator.onLine;
-    if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register(`./service-worker.js?v=${APP_BUILD_TOKEN}`,{scope:'./',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+    if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register(`./service-worker.js?v=${APP_BUILD_TOKEN}`,{scope:'./',updateViaCache:'none'}).catch(()=>{});
     resumeOfflineRuntime().then(ok=>{if(!ok)renderCurrent()}).catch(()=>renderCurrent());
   }
   document.addEventListener('DOMContentLoaded',init);
