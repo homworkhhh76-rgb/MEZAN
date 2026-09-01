@@ -1,0 +1,167 @@
+(function(){
+  'use strict';
+  const A=window.AlMezan,S=A.state,$=A.$,$$=A.$$,num=A.num,esc=A.esc,I=A.I,D=()=>A.db;
+
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  const round=(v,d=6)=>Number(num(v).toFixed(d));
+  function uidBarcode(seed=0){const raw=String(Date.now()+seed).replace(/\D/g,'');return '29'+raw.slice(-9)+String(Math.abs(seed)%10)}
+  function parseValues(v){return String(v||'').split(/[,،\n]/).map(x=>x.trim()).filter(Boolean)}
+  function axesFromProduct(p){return p?.variantAxes?.length?clone(p.variantAxes):[{name:'اللون',values:[]},{name:'المقاس',values:[]}]}
+  function combinations(axes){const active=axes.filter(a=>a.name&&a.values?.length);if(!active.length)return[];let out=[{}];for(const ax of active){const next=[];for(const row of out)for(const val of ax.values)next.push({...row,[ax.name]:val});out=next}return out}
+  function keyOf(attrs){return Object.entries(attrs).map(([k,v])=>`${k}=${v}`).join('|')}
+  function labelOf(attrs){return Object.values(attrs).join(' / ')}
+  function activeChildren(parentId){return D().products.filter(x=>x.parentId===parentId&&x.isVariant&&x.active!==false&&!x.retiredVariant)}
+  function sortedUnits(units){return [...(units||[])].sort((a,b)=>num(a.factor)-num(b.factor))}
+  function largestUnit(units){return sortedUnits(units).at(-1)||null}
+  function baseUnit(units){return sortedUnits(units)[0]||null}
+  function inheritedPurchase(units,anchorId=''){
+    const arr=sortedUnits(units).map(u=>({...u}));if(!arr.length)return arr;
+    const anchor=largestUnit(arr),anchorFactor=Math.max(num(anchor?.factor),.00000001);let anchorPrice=num(anchor?.purchasePrice);
+    if(!anchorPrice){const priced=[...arr].reverse().find(u=>num(u.purchasePrice)>0);if(priced)anchorPrice=num(priced.purchasePrice)*anchorFactor/Math.max(num(priced.factor),.00000001)}
+    arr.forEach(u=>u.purchasePrice=anchorPrice?round(anchorPrice*num(u.factor)/anchorFactor,6):0);return arr;
+  }
+  function fillSaleFromLargest(units){const arr=sortedUnits(units).map(u=>({...u}));if(!arr.length)return arr;const anchor=largestUnit(arr),factor=Math.max(num(anchor?.factor),.00000001),price=num(anchor?.salePrice);arr.forEach(u=>{if(u.id===anchor.id){u.saleAuto=false;return}if(u.saleAuto===true||num(u.salePrice)<=0){u.salePrice=price?round(price*num(u.factor)/factor,6):0;u.saleAuto=true}});return arr}
+  function defaultUnitByParent(parent,childUnits){const pu=(parent.units||[]).find(u=>u.id===parent.defaultCashierUnitId)||baseUnit(parent.units||[]),hit=(childUnits||[]).find(u=>u.name===pu?.name&&Math.abs(num(u.factor)-num(pu?.factor))<1e-8)||(childUnits||[])[0];return hit?.id||''}
+  function parentBaseCost(units){const b=baseUnit(units);return num(b?.purchasePrice)}
+  function variantStock(parentId,warehouseId=''){return activeChildren(parentId).reduce((a,v)=>a+(warehouseId?A.stockQty(v.id,warehouseId):A.totalStock(v.id)),0)}
+  A.variantChildren=activeChildren;
+  A.variantTotalStock=parentId=>variantStock(parentId);
+  A.variantStockQty=(parentId,warehouseId)=>variantStock(parentId,warehouseId);
+
+  function buildChildUnits(parent,oldChild=null,seed=0){
+    const parentUnits=sortedUnits(parent.units||[]);return parentUnits.map((u,i)=>{
+      const old=(oldChild?.units||[]).find(x=>x.id===u.id)||(oldChild?.units||[]).find(x=>num(x.factor)===num(u.factor)&&x.name===u.name)||(oldChild?.units||[])[i];
+      return {...u,id:old?.id||A.uid('UNT'),barcode:old?.barcode||uidBarcode(seed*31+i+1),salePrice:num(old?.salePrice)||num(u.salePrice),saleAuto:old?.saleAuto===true||u.saleAuto===true,purchasePrice:num(u.purchasePrice)};
+    })
+  }
+  function repairVariantParents(save=true){
+    const d=D();let changed=false;
+    for(const parent of d.products.filter(p=>p.hasVariants&&!p.isVariant)){
+      parent.trackStock=false;parent.units=fillSaleFromLargest(inheritedPurchase(parent.units||[],parent.purchaseAnchorUnitId));parent.purchaseAnchorUnitId=largestUnit(parent.units)?.id||'';parent.defaultCashierUnitId=(parent.units||[]).some(u=>u.id===parent.defaultCashierUnitId)?parent.defaultCashierUnitId:(baseUnit(parent.units)?.id||'');parent.cost=parentBaseCost(parent.units);
+      const combos=combinations(parent.variantAxes||[]),existing=d.products.filter(v=>v.parentId===parent.id&&v.isVariant),used=new Set();
+      // توافق مع المتغيرات المنشأة في نسخ أقدم: إذا ضاعت مصفوفة الخصائص فلا نعطّل
+      // المتغيرات الموجودة أو نخفي الصنف من الكاشير. تبقى الفروع المخزنية فعالة كما هي.
+      if(!combos.length&&existing.length){
+        existing.forEach((child,idx)=>{const units=buildChildUnits(parent,child,idx+1);Object.assign(child,{parentId:parent.id,isVariant:true,active:true,retiredVariant:false,categoryId:parent.categoryId,category:parent.category,imageUrl:parent.imageUrl,cost:parentBaseCost(units),taxRate:parent.taxRate,lowStock:parent.lowStock,trackStock:true,trackExpiry:parent.trackExpiry,useRecipe:parent.useRecipe,usageType:parent.usageType,units,defaultCashierUnitId:defaultUnitByParent(parent,units),updatedAt:A.now()});changed=true});
+        continue;
+      }
+      combos.forEach((attrs,idx)=>{
+        const key=keyOf(attrs);let child=existing.find(v=>v.variantKey===key);
+        if(!child){child={id:A.uid('VAR'),createdAt:A.now()};d.products.push(child);changed=true}
+        used.add(child.id);
+        const units=buildChildUnits(parent,child,idx+1);
+        Object.assign(child,{parentId:parent.id,isVariant:true,variantKey:key,variantAttributes:attrs,name:`${parent.name} - ${labelOf(attrs)}`,sku:child.sku||(parent.sku?`${parent.sku}-${idx+1}`:''),categoryId:parent.categoryId,category:parent.category,imageUrl:parent.imageUrl,cost:parentBaseCost(units),taxRate:parent.taxRate,lowStock:parent.lowStock,active:true,showInCashier:false,trackStock:true,trackExpiry:parent.trackExpiry,useRecipe:parent.useRecipe,usageType:parent.usageType,units,defaultCashierUnitId:defaultUnitByParent(parent,units),retiredVariant:false,updatedAt:A.now()});
+      });
+      existing.filter(v=>!used.has(v.id)).forEach(v=>{if(v.active!==false||!v.retiredVariant){v.active=false;v.retiredVariant=true;changed=true}});
+    }
+    if(changed&&save)A.saveDB();return changed;
+  }
+  A.repairVariantParents=repairVariantParents;
+  repairVariantParents(true);
+  (D().products||[]).forEach(p=>{if(p.units?.length&&!p.defaultCashierUnitId)p.defaultCashierUnitId=baseUnit(p.units)?.id||p.units[0].id});A.saveDB();
+
+  function unitCard(u,isNew,opening=0,anchorId='',baseName='وحدة أساسية'){
+    const isAnchor=u.id===anchorId;
+    return `<article class="product-unit-card" data-unit-id="${esc(u.id)}"><div class="product-unit-card-main"><div><strong>${esc(u.name)}</strong>${num(u.factor)===1?A.badge('أساسية','primary'):''}${isAnchor?A.badge('مرجع الشراء','green'):''}<small>1 ${esc(u.name)} = ${num(u.factor)} ${esc(baseName)}</small></div><div class="unit-card-prices"><span>بيع <b>${A.money(u.salePrice)}</b></span><span>شراء <b>${A.money(u.purchasePrice)}</b></span></div></div><div class="unit-card-meta"><span>المعامل: <b>${num(u.factor)}</b></span><span>الباركود: <b>${esc(u.barcode||'—')}</b></span>${isNew?`<label class="unit-opening-inline">افتتاحي <input class="unit-opening-card" type="number" min="0" step="any" value="${opening||''}" placeholder="0"></label>`:''}<button type="button" class="icon-button edit-unit-card" title="تعديل">${I('edit',14)}</button><button type="button" class="icon-button remove-unit-card" title="حذف">${I('trash',14)}</button></div></article>`
+  }
+  function attrRow(a={name:'',values:[]}){return `<div class="variant-axis-row"><label class="field"><span>اسم الخاصية</span><input class="variant-axis-name" value="${esc(a.name||'')}" placeholder="مثال: اللون"></label><label class="field"><span>القيم</span><input class="variant-axis-values" value="${esc((a.values||[]).join('، '))}" placeholder="أحمر، أزرق، أسود"></label><button type="button" class="icon-button remove-variant-axis" title="حذف">${I('trash',15)}</button></div>`}
+
+  function openProduct(product=null){
+    const d=D(),isNew=!product,selectedCategoryId=product?.categoryId||d.categories?.find(c=>c.name===product?.category)?.id||S.pendingProductCategoryId||d.categories?.[0]?.id||'',axes=axesFromProduct(product),children=product?activeChildren(product.id):[];
+    let workingUnits=sortedUnits(product?.units?.length?clone(product.units):[]),anchorId=product?.purchaseAnchorUnitId||largestUnit(workingUnits)?.id||'',editingUnitId='';
+    workingUnits=fillSaleFromLargest(inheritedPurchase(workingUnits,anchorId));anchorId=largestUnit(workingUnits)?.id||anchorId;
+    const openingByUnit={};
+
+    A.openModal({title:product?'تعديل الصنف':'إضافة صنف جديد',size:'modal-xl',body:`
+      <div class="product-form-clean">
+        <div class="product-main-fields"><label class="field"><span>اسم الصنف *</span><input name="name" required value="${esc(product?.name||'')}" placeholder="اسم الصنف"></label>${isNew?`<label class="field"><span>المستودع الافتتاحي</span><select name="warehouseId" class="searchable-select">${A.options(d.warehouses.filter(x=>x.active),'id','name')}</select></label>`:''}</div>
+
+        <section class="form-section product-units-section"><div class="form-section-title"><div><h4>الوحدات والأسعار</h4><small class="muted">سعر الشراء يعتمد دائماً على أكبر وحدة. عند إضافة وحدة أكبر تُعاد تعبئة أسعار شراء الوحدات الأصغر تلقائياً.</small></div></div>
+          <div id="unitList" class="product-unit-list"></div>
+          <div class="unit-composer" id="unitComposer">
+            <div class="unit-composer-title"><strong id="unitComposerTitle">إضافة وحدة</strong><small>أدخل بيانات وحدة واحدة ثم أضفها.</small></div>
+            <div class="form-grid cols-3"><label class="field"><span>اسم الوحدة</span><input id="ucName" placeholder="حبة / كرتونة"></label><label class="field"><span>معامل التحويل</span><input id="ucFactor" type="number" min="0.00000001" step="any" value="${workingUnits.length?'':'1'}"></label><label class="field"><span>الباركود</span><div class="barcode-input-row"><input id="ucBarcode"><button type="button" class="icon-button" id="scanComposerBarcode" title="مسح باركود">${I('camera',15)}</button></div></label><label class="field"><span>سعر البيع</span><input id="ucSale" type="number" min="0" step="0.01"></label><label class="field"><span>سعر الشراء</span><input id="ucPurchase" type="number" min="0" step="any" placeholder="أدخل السعر عند الوحدة الكبرى"></label>${isNew?`<label class="field"><span>الرصيد الافتتاحي</span><input id="ucOpening" type="number" min="0" step="any" placeholder="0"></label>`:''}</div>
+            <div class="unit-composer-actions"><button type="button" class="btn btn-primary" id="saveUnitNormal">${I('plus',14)} إضافة وحدة</button><button type="button" class="btn btn-secondary" id="saveUnitLarger">${I('plus',14)} إضافة وحدة أكبر</button><button type="button" class="btn btn-ghost" id="cancelUnitEdit" hidden>إلغاء التعديل</button></div>
+          </div>
+        </section>
+
+        <section class="form-section variant-section" id="variantSection" ${product?.hasVariants?'':'hidden'}><div class="form-section-title"><div><h4>متغيرات الصنف</h4><small class="muted">كل لون/مقاس/نكهة يصبح صنفاً فرعياً بمخزون مستقل، ويرث كل الوحدات. يمكن إعطاء كل متغير سعر بيع مختلف لكل وحدة.</small></div><button type="button" class="btn btn-secondary btn-sm" id="addVariantAxis">${I('plus')} خاصية</button></div><div id="variantAxes">${axes.map(attrRow).join('')}</div><div class="variant-matrix-toolbar"><button type="button" class="btn btn-primary btn-sm" id="generateVariantMatrix">${I('refresh')} توليد المتغيرات</button><span id="variantMatrixHint" class="muted"></span></div><div id="variantMatrix"></div></section>
+
+        <button type="button" class="additional-settings-toggle" id="toggleAdditionalSettings">${I('settings',16)} <span>إعدادات إضافية</span>${I('chevron',15)}</button>
+        <section class="additional-settings-panel" id="additionalSettings" hidden><div class="form-grid cols-3"><label class="field"><span>التصنيف</span><select name="categoryId" class="searchable-select" required>${A.options((d.categories||[]).filter(x=>x.active!==false),'id','name',selectedCategoryId)}</select></label><label class="field"><span>الرمز الداخلي SKU</span><input name="sku" value="${esc(product?.sku||'')}"></label><label class="field"><span>رابط الصورة</span><input name="imageUrl" type="url" value="${esc(product?.imageUrl||'')}"></label><label class="field"><span>الضريبة %</span><input name="taxRate" type="number" min="0" max="100" step="0.01" value="${num(product?.taxRate??d.settings.taxRate)||''}"></label><label class="field"><span>حد تنبيه المخزون</span><input name="lowStock" type="number" min="0" step="any" value="${num(product?.lowStock??d.settings.lowStock)||''}"></label><label class="field"><span>الحالة</span><select name="active"><option value="1" ${product?.active!==false?'selected':''}>نشط</option><option value="0" ${product?.active===false?'selected':''}>موقوف</option></select></label><label class="field"><span>نوع الاستخدام</span><select name="usageType"><option value="stock" ${(product?.usageType||'stock')==='stock'?'selected':''}>مخزني</option><option value="recipe" ${(product?.usageType||'')==='recipe'?'selected':''}>وصفة / مطعم</option><option value="manufacturing" ${(product?.usageType||'')==='manufacturing'?'selected':''}>تصنيع</option><option value="service" ${(product?.usageType||'')==='service'?'selected':''}>خدمة</option></select></label><label class="check-row"><input name="showInCashier" type="checkbox" ${product?.showInCashier!==false?'checked':''}><span>يظهر في الكاشير</span></label><label class="check-row"><input name="trackStock" type="checkbox" ${product?.trackStock!==false||product?.hasVariants?'checked':''}><span>يتابع كمخزون</span></label><label class="check-row"><input name="trackExpiry" type="checkbox" ${product?.trackExpiry?'checked':''}><span>تشغيلات وصلاحية</span></label><label class="check-row"><input name="useRecipe" type="checkbox" ${product?.useRecipe?'checked':''}><span>وصفة / تصنيع BOM</span></label><label class="check-row"><input id="enableVariants" name="enableVariants" type="checkbox" ${product?.hasVariants?'checked':''}><span>تفعيل متغيرات الأصناف</span></label><label class="field"><span>الوحدة الافتراضية في الكاشير والسلة</span><select id="defaultCashierUnit" name="defaultCashierUnitId"></select></label><label class="field full"><span>ملاحظات</span><textarea name="notes">${esc(product?.notes||'')}</textarea></label></div></section>
+      </div>`,onSubmit:(fd,form)=>{
+        const name=String(fd.get('name')||'').trim(),sku=String(fd.get('sku')||'').trim();if(!name)throw Error('اكتب اسم الصنف.');
+        if(!workingUnits.length)throw Error('أضف وحدة واحدة على الأقل.');
+        if(sku&&d.products.some(x=>x.sku===sku&&x.id!==product?.id&&!x.isVariant))throw Error('SKU مستخدم لصنف آخر.');
+        workingUnits=inheritedPurchase(workingUnits,anchorId);anchorId=largestUnit(workingUnits)?.id||'';
+        const unitCodes=workingUnits.map(u=>String(u.barcode||'').trim()).filter(Boolean);if(new Set(unitCodes).size!==unitCodes.length)throw Error('يوجد باركود مكرر بين وحدات الصنف.');
+        for(const code of unitCodes){const hit=d.products.find(x=>x.id!==product?.id&&x.parentId!==product?.id&&x.units?.some(u=>String(u.barcode||'').trim()===code));if(hit)throw Error(`الباركود ${code} مستخدم في ${hit.name}.`)}
+        const enableVariants=fd.get('enableVariants')==='on',axisData=$$('.variant-axis-row',form).map(r=>({name:$('.variant-axis-name',r).value.trim(),values:parseValues($('.variant-axis-values',r).value)})).filter(a=>a.name&&a.values.length);
+        if(enableVariants&&!axisData.length)throw Error('أضف خاصية واحدة على الأقل للمتغيرات.');
+        const imageUrl=String(fd.get('imageUrl')||'').trim();if(imageUrl&&!/^https?:\/\//i.test(imageUrl))throw Error('رابط الصورة غير صحيح.');
+        const categoryId=fd.get('categoryId'),categoryObj=d.categories?.find(c=>c.id===categoryId),usageType=fd.get('usageType')||'stock',requestedTrackStock=fd.get('trackStock')==='on'&&usageType!=='service';
+        const data={id:product?.id||A.uid('PRD'),name,sku,categoryId,category:categoryObj?.name||'عام',imageUrl,cost:parentBaseCost(workingUnits),taxRate:num(fd.get('taxRate')),lowStock:num(fd.get('lowStock')),active:fd.get('active')==='1',showInCashier:fd.get('showInCashier')==='on',trackStock:enableVariants?false:requestedTrackStock,trackExpiry:fd.get('trackExpiry')==='on',useRecipe:fd.get('useRecipe')==='on'||usageType==='recipe'||usageType==='manufacturing',usageType,notes:String(fd.get('notes')||'').trim(),units:workingUnits.map(u=>({...u})),purchaseAnchorUnitId:anchorId,defaultCashierUnitId:fd.get('defaultCashierUnitId')||baseUnit(workingUnits)?.id||'',hasVariants:enableVariants,variantAxes:enableVariants?axisData:[],createdAt:product?.createdAt||A.now(),updatedAt:A.now()};
+        if(product)Object.assign(product,data);else d.products.unshift(data);
+        const whId=isNew?fd.get('warehouseId'):'';
+        if(!enableVariants&&isNew&&requestedTrackStock){let openingBase=0;$$('.product-unit-card',form).forEach(card=>{const uid=card.dataset.unitId,u=workingUnits.find(x=>x.id===uid);openingBase+=num($('.unit-opening-card',card)?.value)*num(u?.factor||1)});if(openingBase)A.adjustStock(data.id,whId,openingBase)}
+        if(enableVariants){
+          let rows=$$('.variant-matrix-row',form);if(!rows.length){$('#generateVariantMatrix',form)?.click();rows=$$('.variant-matrix-row',form)}if(!rows.length)throw Error('تعذر توليد المتغيرات؛ تحقق من الخصائص والقيم.');
+          const existing=d.products.filter(x=>x.parentId===data.id&&x.isVariant),used=new Set(),allCodes=[];
+          rows.forEach((r,idx)=>{
+            const attrs=JSON.parse(r.dataset.attrs||'{}'),key=keyOf(attrs),old=existing.find(x=>x.variantKey===key),child=old||{id:A.uid('VAR'),createdAt:A.now()};used.add(child.id);
+            const primaryBarcode=$('.variant-barcode',r).value.trim()||uidBarcode(idx+1);allCodes.push(primaryBarcode);
+            const childUnits=workingUnits.map((u,ui)=>{const oldUnit=(old?.units||[]).find(x=>x.id===u.id)||(old?.units||[])[ui],saleInput=$(`.variant-sale-unit[data-unit-id="${CSS.escape(u.id)}"]`,r);return {...u,id:oldUnit?.id||A.uid('UNT'),barcode:ui===0?primaryBarcode:(oldUnit?.barcode||uidBarcode((idx+1)*100+ui)),salePrice:num(saleInput?.value)||num(u.salePrice),saleAuto:num(saleInput?.value)<=0&&u.saleAuto===true,purchasePrice:num(u.purchasePrice)}});
+            Object.assign(child,{parentId:data.id,isVariant:true,variantKey:key,variantAttributes:attrs,name:`${name} - ${labelOf(attrs)}`,sku:old?.sku||(sku?`${sku}-${idx+1}`:''),categoryId,category:data.category,imageUrl:data.imageUrl,cost:parentBaseCost(childUnits),taxRate:data.taxRate,lowStock:data.lowStock,active:true,showInCashier:false,trackStock:true,trackExpiry:data.trackExpiry,useRecipe:data.useRecipe,usageType:data.usageType,units:childUnits,defaultCashierUnitId:defaultUnitByParent(data,childUnits),retiredVariant:false,updatedAt:A.now()});
+            if(!old)d.products.push(child);
+            if(isNew){let openingBase=0;$$('.variant-opening-unit',r).forEach(inp=>{const u=workingUnits.find(x=>x.id===inp.dataset.unitId);openingBase+=num(inp.value)*num(u?.factor||1)});if(openingBase)A.adjustStock(child.id,whId,openingBase)}
+          });
+          if(new Set(allCodes).size!==allCodes.length)throw Error('يوجد باركود مكرر بين المتغيرات.');
+          existing.filter(x=>!used.has(x.id)).forEach(x=>{x.active=false;x.retiredVariant=true});
+        }else if(product?.hasVariants)d.products.filter(x=>x.parentId===data.id&&x.isVariant).forEach(x=>{x.active=false;x.retiredVariant=true});
+        repairVariantParents(false);A.audit(product?'تعديل صنف':'إضافة صنف','المخزون',name);S.pendingProductCategoryId='';A.saveDB();A.toast(product?'تم تحديث الصنف':'تمت إضافة الصنف');A.renderCurrent();
+      },afterOpen:form=>{
+        const unitList=$('#unitList',form),variantSection=$('#variantSection',form),variantMatrix=$('#variantMatrix',form),enable=$('#enableVariants',form),additional=$('#additionalSettings',form),toggleAdditional=$('#toggleAdditionalSettings',form),defaultUnitSelect=$('#defaultCashierUnit',form);
+        const fields={name:$('#ucName',form),factor:$('#ucFactor',form),barcode:$('#ucBarcode',form),sale:$('#ucSale',form),purchase:$('#ucPurchase',form),opening:$('#ucOpening',form)};
+        function recalcPurchase(){workingUnits=fillSaleFromLargest(inheritedPurchase(workingUnits,anchorId));anchorId=largestUnit(workingUnits)?.id||''}
+        function renderUnits(){const previousDefault=defaultUnitSelect?.value||product?.defaultCashierUnitId||'';recalcPurchase();unitList.innerHTML=workingUnits.length?workingUnits.map(u=>unitCard(u,isNew,openingByUnit[u.id]||0,anchorId,baseUnit(workingUnits)?.name||'وحدة أساسية')).join(''):`<div class="unit-list-empty">لا توجد وحدات مضافة. ابدأ من الحقول أدناه.</div>`;if(defaultUnitSelect){defaultUnitSelect.innerHTML=workingUnits.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');defaultUnitSelect.value=workingUnits.some(u=>u.id===previousDefault)?previousDefault:(baseUnit(workingUnits)?.id||'')}A.injectIcons(unitList);$('#variantMatrixHint',form).textContent=workingUnits.length?`${workingUnits.length} وحدة — الوحدة الكبرى: ${largestUnit(workingUnits)?.name||'—'}`:'أضف الوحدات أولاً'}
+        function clearComposer(){editingUnitId='';fields.name.value='';fields.factor.value=workingUnits.length?'':'1';fields.barcode.value='';fields.sale.value='';fields.purchase.value='';if(fields.opening)fields.opening.value='';$('#unitComposerTitle',form).textContent='إضافة وحدة';$('#saveUnitNormal',form).innerHTML=`${I('plus',14)} إضافة وحدة`;$('#saveUnitLarger',form).hidden=false;$('#cancelUnitEdit',form).hidden=true;A.injectIcons($('#unitComposer',form))}
+        function loadUnit(id){const u=workingUnits.find(x=>x.id===id);if(!u)return;editingUnitId=id;fields.name.value=u.name;fields.factor.value=num(u.factor);fields.barcode.value=u.barcode||'';fields.sale.value=u.saleAuto?'':(num(u.salePrice)||'');fields.purchase.value=num(u.purchasePrice)||'';if(fields.opening)fields.opening.value=openingByUnit[u.id]||'';$('#unitComposerTitle',form).textContent=`تعديل ${u.name}`;$('#saveUnitNormal',form).textContent='حفظ تعديل الوحدة';$('#saveUnitLarger',form).hidden=true;$('#cancelUnitEdit',form).hidden=false}
+        function composerData(){const rawSale=String(fields.sale.value||'').trim();return{name:fields.name.value.trim(),factor:num(fields.factor.value),barcode:fields.barcode.value.trim(),salePrice:num(rawSale),saleAuto:rawSale==='',purchasePrice:num(fields.purchase.value),opening:num(fields.opening?.value)}}
+        function saveComposer(asLarger=false){const x=composerData();if(!x.name)return A.toast('اكتب اسم الوحدة.','warning');if(!x.factor||x.factor<=0)return A.toast('معامل الوحدة يجب أن يكون أكبر من صفر.','warning');if(!workingUnits.length)x.factor=1;const old=editingUnitId?workingUnits.find(u=>u.id===editingUnitId):null,currentMax=Math.max(0,...workingUnits.filter(u=>u.id!==editingUnitId).map(u=>num(u.factor)));
+          if(!editingUnitId&&asLarger&&workingUnits.length&&x.factor<=currentMax)return A.toast('معامل الوحدة الأكبر يجب أن يكون أكبر من الوحدات الحالية.','warning');
+          if(!editingUnitId&&!asLarger&&workingUnits.length&&x.factor>currentMax)return A.toast('هذه وحدة أكبر من الحالية؛ استخدم زر «إضافة وحدة أكبر».','warning');
+          const id=old?.id||A.uid('UNT'),obj={id,name:x.name,factor:x.factor,barcode:x.barcode,salePrice:x.salePrice,saleAuto:x.saleAuto,purchasePrice:x.purchasePrice};
+          if(old)Object.assign(old,obj);else workingUnits.push(obj);if(isNew)openingByUnit[id]=x.opening;
+          const maxAfter=largestUnit(workingUnits);if(asLarger||!anchorId||maxAfter?.id===id)anchorId=maxAfter?.id||id;
+          if(anchorId===id&&x.purchasePrice<=0&&workingUnits.length>1){const prev=workingUnits.filter(u=>u.id!==id).sort((a,b)=>num(b.factor)-num(a.factor))[0];if(prev&&num(prev.purchasePrice)>0)obj.purchasePrice=round(num(prev.purchasePrice)*num(obj.factor)/num(prev.factor),6)}
+          recalcPurchase();renderUnits();clearComposer();variantMatrix.innerHTML='';
+        }
+        renderUnits();clearComposer();
+        $('#saveUnitNormal',form).onclick=()=>saveComposer(false);$('#saveUnitLarger',form).onclick=()=>saveComposer(true);$('#cancelUnitEdit',form).onclick=clearComposer;
+        unitList.addEventListener('click',e=>{const card=e.target.closest('.product-unit-card');if(!card)return;if(e.target.closest('.edit-unit-card'))return loadUnit(card.dataset.unitId);if(e.target.closest('.remove-unit-card')){if(workingUnits.length===1)return A.toast('يجب إبقاء وحدة واحدة على الأقل.','warning');workingUnits=workingUnits.filter(u=>u.id!==card.dataset.unitId);delete openingByUnit[card.dataset.unitId];anchorId=largestUnit(workingUnits)?.id||'';renderUnits();variantMatrix.innerHTML=''}});
+        unitList.addEventListener('input',e=>{if(e.target.classList.contains('unit-opening-card'))openingByUnit[e.target.closest('.product-unit-card').dataset.unitId]=num(e.target.value)});
+        $('#scanComposerBarcode',form).onclick=()=>A.scanBarcodeCamera({title:'مسح باركود الوحدة',onDetected:code=>{fields.barcode.value=code;A.playBarcodeSound?.()}});
+        fields.factor.addEventListener('input',()=>{if(editingUnitId&&editingUnitId!==anchorId){const anchor=workingUnits.find(u=>u.id===anchorId),ap=num(anchor?.purchasePrice);fields.purchase.value=ap?round(ap*num(fields.factor.value)/num(anchor.factor),6):''}});
+        toggleAdditional.onclick=()=>{additional.hidden=!additional.hidden;toggleAdditional.classList.toggle('open',!additional.hidden)};
+        enable.onchange=()=>{variantSection.hidden=!enable.checked;if(enable.checked&&workingUnits.length)$('#generateVariantMatrix',form)?.click()};
+        $('#addVariantAxis',form).onclick=()=>{$('#variantAxes',form).insertAdjacentHTML('beforeend',attrRow());A.injectIcons($('#variantAxes',form))};
+        $('#variantAxes',form).addEventListener('click',e=>e.target.closest('.remove-variant-axis')?.closest('.variant-axis-row')?.remove());
+        function renderMatrix(){if(!workingUnits.length)return A.toast('أضف الوحدات أولاً.','warning');const ax=$$('.variant-axis-row',form).map(r=>({name:$('.variant-axis-name',r).value.trim(),values:parseValues($('.variant-axis-values',r).value)})).filter(a=>a.name&&a.values.length),comb=combinations(ax);if(!comb.length){variantMatrix.innerHTML='<div class="unit-list-empty">أدخل قيم الخصائص ثم اضغط توليد المتغيرات.</div>';return}const oldMap=new Map(children.map(x=>[x.variantKey,x]));variantMatrix.innerHTML=`<div class="table-wrap"><table class="data-table variant-matrix-table variant-units-matrix"><thead><tr><th>المتغير</th><th>باركود أساسي</th><th>أسعار البيع حسب الوحدة</th>${isNew?'<th>الرصيد الافتتاحي حسب الوحدة</th>':''}<th>الرصيد الحالي</th></tr></thead><tbody>${comb.map((attrs,i)=>{const key=keyOf(attrs),old=oldMap.get(key),stock=old?A.totalStock(old.id):0;return `<tr class="variant-matrix-row" data-attrs='${esc(JSON.stringify(attrs))}'><td><b>${esc(labelOf(attrs))}</b></td><td><input class="variant-barcode" value="${esc(old?.units?.[0]?.barcode||uidBarcode(i+1))}"></td><td><div class="variant-unit-price-grid">${workingUnits.map((u,ui)=>{const ou=(old?.units||[]).find(x=>num(x.factor)===num(u.factor)&&x.name===u.name)||(old?.units||[])[ui];return `<label><span>${esc(u.name)}</span><input class="variant-sale-unit" data-unit-id="${esc(u.id)}" type="number" min="0" step="0.01" value="${num(ou?.salePrice)||num(u.salePrice)||''}"></label>`}).join('')}</div></td>${isNew?`<td><div class="variant-unit-opening-grid">${workingUnits.map(u=>`<label><span>${esc(u.name)}</span><input class="variant-opening-unit" data-unit-id="${esc(u.id)}" type="number" min="0" step="any" placeholder="0"></label>`).join('')}</div></td>`:''}<td>${old?`<b>${esc(A.unitBreakdown(old,stock))}</b>`:'جديد'}</td></tr>`}).join('')}</tbody></table></div>`}
+        $('#generateVariantMatrix',form).onclick=renderMatrix;if(product?.hasVariants)renderMatrix();
+      }});
+  }
+
+  function cashierWarehouse(){const d=D();return d.warehouses.find(w=>w.id===S.cashierWarehouseId)||d.warehouses.find(w=>w.branchId===S.activeBranchId&&w.active)||d.warehouses[0]}
+  function addVariantToCart(childId,unitId){
+    const p=D().products.find(x=>x.id===childId&&x.isVariant&&x.active!==false),u=A.productUnit(p,unitId)||p?.units?.[0];if(!p||!u)return A.toast('المتغير غير متاح.','warning');const wh=cashierWarehouse(),needed=num(u.factor||1),inCart=S.cart.filter(x=>x.productId===p.id).reduce((a,l)=>a+num(l.qty)*num(A.productUnit(p,l.unitId)?.factor||1),0),available=A.stockQty(p.id,wh?.id)-inCart;if(p.trackStock!==false&&available+1e-8<needed)return A.toast(`الرصيد غير كافٍ للمتغير ${p.name}.`,'warning');const customer=D().customers.find(c=>c.id===S.cashierCustomerId)||D().customers.find(c=>c.system)||D().customers[0],price=A.priceForCustomer?A.priceForCustomer(p,u,customer):num(u.salePrice),existing=S.cart.find(x=>x.productId===p.id&&x.unitId===u.id&&num(x.unitPrice)===num(price));if(existing)existing.qty=num(existing.qty)+1;else S.cart.push({id:A.uid('CART'),productId:p.id,unitId:u.id,qty:1,unitPrice:num(price),discount:0});A.persistCart();A.closeModal();A.renderCurrent();
+  }
+  A.openVariantPicker=function(parentId){
+    repairVariantParents(false);const d=D(),parent=d.products.find(x=>x.id===parentId&&!x.isVariant),children=activeChildren(parentId);if(!parent||!children.length)return A.toast('لا توجد متغيرات فعالة. افتح الصنف واضغط توليد المتغيرات ثم احفظ.','warning');const axes=(parent.variantAxes||[]).filter(a=>a.name&&a.values?.length),selected={};let selectedUnitId='';
+    A.openModal({title:parent.name,size:'modal-md',hideSubmit:true,body:`<div class="variant-picker"><div class="variant-picker-axes">${axes.map(ax=>`<div class="variant-picker-axis"><b>${esc(ax.name)}</b><div>${ax.values.map(v=>`<button type="button" class="variant-option" data-axis="${esc(ax.name)}" data-value="${esc(v)}">${esc(v)}</button>`).join('')}</div></div>`).join('')}</div><div id="variantPickerResult" class="variant-picker-result">اختر الخصائص</div></div>`,afterOpen:form=>{const result=$('#variantPickerResult',form);function refresh(){const hits=children.filter(c=>Object.entries(selected).every(([k,v])=>c.variantAttributes?.[k]===v));if(Object.keys(selected).length===axes.length&&hits.length===1){const c=hits[0],stock=A.stockQty(c.id,cashierWarehouse()?.id),units=sortedUnits(c.units),sellable=units.filter(u=>stock+1e-8>=num(u.factor||1));if(!selectedUnitId||!units.some(u=>u.id===selectedUnitId)){const def=units.find(u=>u.id===c.defaultCashierUnitId);selectedUnitId=(def&&sellable.some(u=>u.id===def.id)?def:(sellable[0]||units[0]))?.id||'';}const unit=A.productUnit(c,selectedUnitId)||units[0],customer=d.customers.find(x=>x.id===S.cashierCustomerId)||d.customers.find(x=>x.system),price=A.priceForCustomer?A.priceForCustomer(c,unit,customer):num(unit?.salePrice);result.innerHTML=`<div class="variant-picked-card variant-picked-units"><div><strong>${esc(c.name)}</strong><small>${esc(c.units?.[0]?.barcode||'')}</small><small>الرصيد: ${esc(A.unitBreakdown(c,stock))}</small></div><div class="variant-picker-units">${units.map(u=>`<button type="button" class="variant-unit-option ${u.id===selectedUnitId?'active':''}" data-unit-id="${u.id}" ${stock+1e-8<num(u.factor||1)?'disabled':''}><b>${esc(u.name)}</b><span>${A.money(A.priceForCustomer?A.priceForCustomer(c,u,customer):u.salePrice)}</span></button>`).join('')}</div><div class="variant-picker-price"><b>${A.money(price)}</b><small>${esc(unit?.name||'')}</small></div><button type="button" class="btn btn-primary" id="variantAddToCart" ${!sellable.length?'disabled':''}>${I('plus')} إضافة للسلة</button></div>`;$$('.variant-unit-option',result).forEach(b=>b.onclick=()=>{selectedUnitId=b.dataset.unitId;refresh()});$('#variantAddToCart',result)?.addEventListener('click',()=>addVariantToCart(c.id,selectedUnitId))}else result.innerHTML=`<span>${hits.length} متغير متاح — أكمل الاختيار</span>`}
+      $$('.variant-option',form).forEach(b=>b.onclick=()=>{selected[b.dataset.axis]=b.dataset.value;$$(`.variant-option[data-axis="${CSS.escape(b.dataset.axis)}"]`,form).forEach(x=>x.classList.toggle('active',x===b));refresh()})}})
+  };
+
+  A.registerAction('add-product',()=>openProduct());
+  A.registerAction('edit-product',b=>{const p=D().products.find(x=>x.id===b.dataset.id);openProduct(p?.isVariant?D().products.find(x=>x.id===p.parentId):p)});
+  A.registerAction('delete-product',b=>{const d=D(),p=d.products.find(x=>x.id===b.dataset.id);if(!p)return;const parent=p.isVariant?d.products.find(x=>x.id===p.parentId):p,ids=[parent.id,...d.products.filter(x=>x.parentId===parent.id&&x.isVariant).map(x=>x.id)],hasMoves=d.sales.some(s=>(s.lines||[]).some(l=>ids.includes(l.productId)))||d.purchases.some(s=>(s.lines||[]).some(l=>ids.includes(l.productId)))||ids.some(id=>A.totalStock(id)!==0);if(hasMoves)return A.toast('لا يمكن حذف الصنف أو متغيراته لوجود مخزون أو حركات. أوقفه بدلاً من ذلك.','warning');A.confirmDialog('حذف الصنف',parent.name,()=>{d.products=d.products.filter(x=>!ids.includes(x.id));d.stock=d.stock.filter(x=>!ids.includes(x.productId));d.itemPrices=(d.itemPrices||[]).filter(x=>!ids.includes(x.productId));A.audit('حذف صنف','المخزون',parent.name);A.saveDB();A.toast('تم حذف الصنف ومتغيراته');A.renderCurrent()})});
+})();
