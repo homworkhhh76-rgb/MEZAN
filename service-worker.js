@@ -1,4 +1,4 @@
-const CACHE='almezan-pro-v734-20260901-shift-balances-account-tree';
+const CACHE='almezan-pro-v735-20260901-fast-barcode-pwa-nav';
 const FILES=[
   './','./index.html','./dashboard.html','./cashier.html','./reports.html','./README.html','./admin.html',
   './app.css','./activation-runtime.js','./app.js','./bluetooth-printer.js','./almezan-sync.js','./views.js','./admin.js','./master-admin.js',

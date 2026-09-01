@@ -1301,3 +1301,47 @@ html.tablet-desktop .sidebar.open #logoutBtn{width:28px!important;height:28px!im
   .account-row{grid-template-columns:48px minmax(0,1fr) 56px!important;column-gap:5px!important;padding:7px 6px!important}
   .account-row .account-code{font-size:8px!important}.account-row .account-balance{font-size:8.5px!important;min-width:50px!important}.account-row .table-actions .icon-button{width:29px!important;height:29px!important;flex-basis:29px!important}
 }
+
+
+/* ===== v7.35 fast barcode camera + PWA install + account tree hardening ===== */
+/* No blue glow/focus halo on the sync control. */
+.sync-button,.sync-button:hover,.sync-button:active,.sync-button:focus,.sync-button:focus-visible{
+  box-shadow:0 1px 3px rgba(31,48,68,.055)!important;
+  outline:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+.sync-button:focus-visible{border-color:#c9d1da!important}
+.sync-button.is-syncing{box-shadow:0 1px 3px rgba(31,48,68,.055)!important}
+
+/* Standalone camera overlay — deliberately independent from .modalRoot so an add-product modal never closes. */
+.barcode-camera-overlay{position:fixed;z-index:40000;inset:0;background:rgba(9,17,27,.82);backdrop-filter:blur(4px);display:grid;place-items:center;padding:14px;direction:rtl}
+.barcode-camera-shell{width:min(980px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:#f8fafc;border:1px solid #c5d1dc;border-radius:15px;box-shadow:0 24px 75px rgba(0,0,0,.35)}
+.barcode-camera-head{height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;border-bottom:1px solid #d7dfe7;background:#fff}
+.barcode-camera-head h3{margin:1px 0 0;font-size:14px;color:#17202b}.barcode-camera-kicker{display:flex;align-items:center;gap:5px;color:#2367c9;font-size:8px;font-weight:800}.barcode-camera-close{flex:0 0 36px;width:36px;height:36px}
+.barcode-camera-stage{position:relative;width:100%;aspect-ratio:16/9;min-height:250px;max-height:68vh;overflow:hidden;background:#03070b}
+.barcode-camera-video{display:block;width:100%;height:100%;object-fit:cover;background:#03070b}
+.barcode-scan-window{position:absolute;inset:12% 5%;border-radius:15px;box-shadow:0 0 0 999px rgba(0,0,0,.23);overflow:hidden;pointer-events:none}
+.barcode-scan-line{position:absolute;z-index:3;right:2%;left:2%;top:6%;height:2px;background:linear-gradient(90deg,transparent,#36e798 18%,#fff 50%,#36e798 82%,transparent);box-shadow:0 0 9px rgba(54,231,152,.9);animation:barcode-sweep 1.55s cubic-bezier(.45,0,.55,1) infinite alternate}
+@keyframes barcode-sweep{from{top:7%}to{top:92%}}
+.scan-corner{position:absolute;width:34px;height:34px;border-color:#45e6a2;border-style:solid;filter:drop-shadow(0 0 4px rgba(69,230,162,.55))}.scan-corner.c1{right:0;top:0;border-width:3px 3px 0 0;border-radius:0 13px 0 0}.scan-corner.c2{left:0;top:0;border-width:3px 0 0 3px;border-radius:13px 0 0 0}.scan-corner.c3{right:0;bottom:0;border-width:0 3px 3px 0;border-radius:0 0 13px 0}.scan-corner.c4{left:0;bottom:0;border-width:0 0 3px 3px;border-radius:0 0 0 13px}
+.barcode-camera-status{position:absolute;right:50%;bottom:11px;transform:translateX(50%);display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;align-items:center;column-gap:6px;min-width:210px;padding:7px 11px;border-radius:999px;background:rgba(9,18,28,.72);color:#fff;text-align:center;backdrop-filter:blur(6px)}.barcode-camera-status .barcode-camera-dot{width:7px;height:7px;border-radius:50%;background:#36e798;box-shadow:0 0 0 4px rgba(54,231,152,.15);grid-row:1/span 2}.barcode-camera-status b{font-size:9px}.barcode-camera-status small{font-size:7px;color:#bed0df}.barcode-camera-status.scan-ok{background:rgba(16,111,72,.86)}.barcode-camera-status.scan-warn{background:rgba(150,88,15,.86)}
+.barcode-camera-foot{min-height:42px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;padding:7px 12px;background:#fff;color:#607080;font-size:8px;border-top:1px solid #d7dfe7}.barcode-camera-foot>span{display:inline-flex;align-items:center;gap:5px}.keep-scanner-pill{color:#14734a!important;background:#edf9f3;padding:4px 8px;border:1px solid #b9e1cc;border-radius:999px}
+.barcode-camera-fallback{padding:34px 18px;text-align:center;color:#334155}.barcode-camera-fallback>div{display:grid;place-items:center;gap:7px;margin-bottom:14px}.barcode-camera-fallback b{font-size:13px}.barcode-camera-fallback small{max-width:520px;color:#708090;font-size:9px}.barcode-camera-fallback .btn{min-width:170px}
+@media(max-width:760px){.barcode-camera-overlay{padding:0;align-items:center}.barcode-camera-shell{width:100vw;max-height:100vh;border-radius:0;border-inline:0}.barcode-camera-head{height:52px}.barcode-camera-stage{aspect-ratio:16/9;min-height:0;max-height:none}.barcode-scan-window{inset:9% 4%}.barcode-camera-status{bottom:8px;min-width:190px}.barcode-camera-foot{gap:10px}}
+@media(orientation:landscape) and (max-height:620px){.barcode-camera-shell{width:min(980px,94vw)}.barcode-camera-stage{max-height:72vh}.barcode-camera-head{height:46px}.barcode-camera-foot{min-height:34px}}
+
+/* Account tree stays centered inside the viewport on phones; nothing can escape to the left. */
+@media(max-width:760px){
+  .account-tree{width:100%!important;max-width:100%!important;padding:0!important;margin:0!important;overflow:visible!important;direction:rtl!important}
+  .account-tree .account-row{display:flex!important;flex-wrap:wrap!important;align-items:flex-start!important;gap:5px 7px!important;width:100%!important;max-width:100%!important;margin:0 0 6px!important;padding:8px!important;padding-inline:8px!important;position:relative!important;right:auto!important;left:auto!important;transform:none!important;direction:rtl!important;overflow:hidden!important}
+  .account-row .account-code{order:1!important;flex:0 0 52px!important;min-width:0!important;width:52px!important;text-align:center!important;padding:2px 3px!important;font-size:8.5px!important}
+  .account-row .account-title{order:2!important;flex:1 1 calc(100% - 122px)!important;min-width:0!important;text-align:right!important}
+  .account-row .account-balance{order:3!important;flex:0 0 55px!important;min-width:55px!important;width:55px!important;text-align:left!important;padding-top:2px!important;font-size:9px!important}
+  .account-row .table-actions{order:4!important;flex:0 0 100%!important;width:100%!important;display:flex!important;direction:rtl!important;justify-content:flex-start!important;gap:5px!important;padding:2px 59px 0 0!important;margin:0!important}
+  .account-row .table-actions .icon-button{width:30px!important;height:30px!important;flex:0 0 30px!important}
+}
+@media(max-width:430px){.account-tree .account-row{padding:7px 6px!important}.account-row .account-code{flex-basis:46px!important;width:46px!important;font-size:7.8px!important}.account-row .account-title{flex-basis:calc(100% - 111px)!important}.account-row .account-balance{flex-basis:51px!important;width:51px!important;min-width:51px!important;font-size:8.2px!important}.account-row .table-actions{padding-right:53px!important}}
+
+/* PWA install card in Settings. */
+.app-install-setting{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center}.app-install-head{display:flex;align-items:center;gap:10px;min-width:0}.app-install-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border-radius:10px;background:#edf4ff;color:#2367c9;border:1px solid #c9daf3}.app-install-head h3{margin:0!important}.app-install-head p{margin:2px 0 0!important;display:block!important;font-size:8.5px!important}.app-install-button{min-width:150px;justify-content:center}.app-install-button.is-installed{background:#edf9f2!important;color:#187849!important;border-color:#b7dfc7!important}.app-install-status{grid-column:1/-1;color:#6b7888;font-size:8px;border-top:1px dashed #d4dce5;padding-top:6px}
+@media(max-width:620px){.app-install-setting{grid-template-columns:1fr}.app-install-button{width:100%}}
