@@ -1,6 +1,6 @@
-const BUILD='742';
+const BUILD='745';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v742-thermal-template-invoice-controls`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v745-accounting-publish`;
 const PAGE_FILES=[
   './index.html',
   './dashboard.html',

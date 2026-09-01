@@ -143,20 +143,38 @@
   function readPrintGuard(){try{return JSON.parse(localStorage.getItem(PRINT_GUARD_KEY)||'null')||null}catch(_){return null}}
   function writePrintGuard(saleId){try{localStorage.setItem(PRINT_GUARD_KEY,JSON.stringify({saleId:String(saleId||''),at:Date.now()}))}catch(_){}}
   function recentlyPrinting(saleId){const g=readPrintGuard();return !!(state.printing||state.printingSaleId===String(saleId||'')||(g&&g.saleId===String(saleId||'')&&Date.now()-Number(g.at||0)<PRINT_GUARD_MS))}
+  async function browserPrintInvoice(sale){
+    // نطبع من iframe خفي: تظهر نافذة الطباعة الأصلية فقط، بدون فتح تبويب/صفحة معاينة داخل التطبيق.
+    const st=settings(),canvas=await receiptCanvas(sale),dataUrl=canvas.toDataURL('image/png');
+    const paper=st.printSize==='58'?'58mm':st.printSize==='a4'?'210mm':'80mm';
+    const imageWidth=st.printSize==='58'?'54mm':st.printSize==='a4'?'190mm':'76mm';
+    const frame=document.createElement('iframe');
+    frame.setAttribute('aria-hidden','true');
+    frame.style.cssText='position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(frame);
+    const doc=frame.contentDocument||frame.contentWindow?.document;if(!doc){frame.remove();throw new Error('تعذر تجهيز نافذة الطباعة.');}
+    doc.open();doc.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${String(sale.number||'فاتورة')}</title><style>@page{margin:0}html,body{margin:0!important;padding:0!important;background:#fff;width:${paper};}body{display:flex;justify-content:center;align-items:flex-start}img{display:block;width:${imageWidth};height:auto;margin:0 auto;image-rendering:auto}@media print{html,body{margin:0!important;padding:0!important}}</style></head><body><img id="receiptImage" alt="فاتورة" src="${dataUrl}"></body></html>`);doc.close();
+    const img=doc.getElementById('receiptImage');
+    if(img&&!img.complete)await new Promise(resolve=>{const done=()=>resolve();img.addEventListener('load',done,{once:true});img.addEventListener('error',done,{once:true});setTimeout(done,900)});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const win=frame.contentWindow;if(!win){frame.remove();throw new Error('تعذر فتح نافذة الطباعة.');}
+    let cleaned=false;const cleanup=()=>{if(cleaned)return;cleaned=true;setTimeout(()=>frame.remove(),60)};
+    try{win.addEventListener?.('afterprint',cleanup,{once:true});win.focus();win.print();setTimeout(cleanup,5000);return true}catch(err){cleanup();throw err}
+  }
   async function printInvoice(sale){
-    if(!sale)throw new Error('الفاتورة غير موجودة.');const s=settings();
+    if(!sale)throw new Error('الفاتورة غير موجودة.');
     if(recentlyPrinting(sale.id))return false;
-    // الطباعة الحرارية الصامتة المباشرة تتم فقط عبر Bluetooth المحفوظ. لا نفتح صفحة معاينة كبديل.
-    if(s.printSize==='a4'){window.open(`./index.html?v=742#print-invoice/${sale.id}`,'_blank');return false}
-    if(s.printerConnection!=='bluetooth'||!support())return false;
-    state.printing=true;state.printingSaleId=String(sale.id||'');writePrintGuard(sale.id);emit();
+    const s=settings();state.printing=true;state.printingSaleId=String(sale.id||'');writePrintGuard(sale.id);emit();
     try{
+      // طباعة النظام: افتح نافذة الطباعة الأصلية فوراً من iframe خفي، بدون صفحة معاينة جديدة.
+      if(s.printSize==='a4'||s.printerConnection!=='bluetooth')return await browserPrintInvoice(sale);
+      // Bluetooth: طباعة مباشرة فقط. لا نفتح نافذة النظام كبديل حتى لا تتكرر الفاتورة.
+      if(!support())return false;
       if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();
       const canvas=await receiptCanvas(sale),bytes=rasterBytes(canvas);await writeBytes(bytes);
       A.toast?.(`تمت طباعة ${sale.number} على ${state.device?.name||'طابعة البلوتوث'}`,'success');return true
     }catch(e){
       console.error(e);const msg=String(e?.message||e||'');
-      // لا Toast عند عدم وجود/توفر طابعة محفوظة، ولا نفتح معاينة طباعة حتى لا تتكرر الفاتورة.
       if(!/لا توجد طابعة محفوظة|الطابعة المحفوظة غير متاحة|Bluetooth Web غير مدعوم/.test(msg))A.toast?.('تعذر إرسال الفاتورة للطابعة: '+msg,'error',5200);
       return false
     }finally{state.printing=false;state.printingSaleId='';emit()}

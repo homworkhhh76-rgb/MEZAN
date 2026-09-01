@@ -32,7 +32,7 @@
     return true;
   }
   function addProduct(productId,unitId){const p=D().products.find(x=>x.id===productId&&x.active!==false);if(!p){A.toast('الصنف غير متاح.','warning');return false}if(p.hasVariants&&!p.isVariant){A.openVariantPicker?.(p.id);return false}const u=A.productUnit(p,unitId||p.defaultCashierUnitId);if(!u||!canAdd(p,u,1))return false;const price=A.priceForCustomer?A.priceForCustomer(p,u,selectedPricingCustomer()):num(u.salePrice),existing=S.cart.find(x=>x.productId===p.id&&x.unitId===u.id&&num(x.unitPrice)===num(price));if(existing)existing.qty=num(existing.qty)+1;else S.cart.push({id:A.uid('CART'),productId:p.id,unitId:u.id,qty:1,unitPrice:num(price),discount:0});A.persistCart();renderCashier($('#workspace'));return true}
-  function scanCode(code,{camera=false}={}){const hit=A.findProductByBarcode?.(code);if(hit){const added=addProduct(hit.product.id,hit.unit.id);if(added&&camera)A.playBarcodeSound?.();return !!added}A.toast(`لم يتم العثور على الكود: ${code}`,'warning');return false}
+  function scanCode(code,{camera=false}={}){const hit=A.findProductByBarcode?.(code);if(hit){const added=addProduct(hit.product.id,hit.unit.id);if(added)A.playBarcodeSound?.();return !!added}A.toast(`لم يتم العثور على الكود: ${code}`,'warning');return false}
 
   function cartItem(line){
     const c=lineCalc(line),p=c.p;if(!p)return'';
