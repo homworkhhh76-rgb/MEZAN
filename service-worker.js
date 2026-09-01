@@ -1,9 +1,9 @@
-const BUILD='737';
+const BUILD='738';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v737-instant-cache`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v738-instant-cache`;
 const FILES=[
   './index.html?v='+BUILD,'./dashboard.html?v='+BUILD,'./cashier.html?v='+BUILD,'./reports.html?v='+BUILD,'./README.html?v='+BUILD,'./admin.html?v='+BUILD,
-  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./views.js?v='+BUILD,'./admin.js?v='+BUILD,'./master-admin.js?v='+BUILD,
+  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./views.js?v='+BUILD,'./admin-runtime-738.js?v='+BUILD,'./admin.js?v='+BUILD,'./master-admin.js?v='+BUILD,
   './pricing.js?v='+BUILD,'./cashier.js?v='+BUILD,'./enterprise.js?v='+BUILD,'./advanced.js?v='+BUILD,'./finance-pro.js?v='+BUILD,'./inventory-restaurant.js?v='+BUILD,'./variants-pro.js?v='+BUILD,'./variant-transfer.js?v='+BUILD,
   './app-icon-192.png?v='+BUILD,'./app-icon-512.png?v='+BUILD,'./app-icon.svg?v='+BUILD,'./brand-logo.png?v='+BUILD,'./barcode-scan.mp3?v='+BUILD,'./manifest.webmanifest?v='+BUILD
 ];
@@ -33,8 +33,11 @@ self.addEventListener('activate',event=>{
 });
 
 async function matchLocal(cache,request){
-  return (await cache.match(request))||(await cache.match(request,{ignoreSearch:true}))||null;
+  // Exact URL only. Query versions are part of the cache identity.
+  // This prevents GitHub Pages from mixing old JS with a new index after deployment.
+  return (await cache.match(request))||null;
 }
+
 
 async function fetchAndStore(cache,request){
   const fresh=await fetch(new Request(request,{cache:'no-cache'}));
@@ -55,7 +58,7 @@ async function instantCache(request,event){
     return await fetchAndStore(cache,request);
   }catch(_){
     if(request.mode==='navigate'){
-      return (await cache.match('./index.html?v='+BUILD))||(await cache.match('./index.html',{ignoreSearch:true}))||Response.error();
+      return (await cache.match('./index.html?v='+BUILD))||Response.error();
     }
     return new Response('',{status:503,statusText:'Offline'});
   }

@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch';
-  const APP_BUILD='7.37',APP_BUILD_TOKEN='737',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.38',APP_BUILD_TOKEN='738',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const runtime=()=>window.AlMezanActivation?.readRuntime?.()||null;
   const tenantId=()=>String(runtime()?.companyId||runtime()?.tenantId||'').trim();
   const scopedKey=(base,id=tenantId())=>id?`${base}::${encodeURIComponent(id)}`:base;
@@ -158,7 +158,7 @@
   let barcodeSoundAudio=null;function playBarcodeSound(force=false){if(!force&&db.settings.barcodeSoundEnabled===false)return false;try{if(!barcodeSoundAudio){barcodeSoundAudio=new Audio('barcode-scan.mp3');barcodeSoundAudio.preload='auto';barcodeSoundAudio.volume=.9}barcodeSoundAudio.pause();barcodeSoundAudio.currentTime=0;const p=barcodeSoundAudio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});return true}catch(e){return false}}
   function saveDB(force=false,opts={}){if(state.financialPreviewMode&&!force)return true;try{localStorage.setItem(dbKey(),JSON.stringify(db));try{window.AlMezan?.refreshPricingCache?.()}catch(_){}if(!opts.fromSync)try{window.AlMezanSync?.capture?.(db)}catch(_){}try{window.AlMezanSync?.mirrorDb?.(db)}catch(_){}return true}catch(e){try{window.AlMezanSync?.mirrorDb?.(db)}catch(_){}toast('تعذر الحفظ في التخزين السريع، وتمت محاولة الحفظ الاحتياطي على الجهاز.','error');return false}}
   function setDB(next,opts={}){db=normalizeDB(next);if(window.AlMezan)A.db=db;saveDB(true,opts)}
-  function replaceDBFromSync(next){db=normalizeDB(next);if(window.AlMezan)A.db=db;saveDB(true,{fromSync:true});try{renderCurrent()}catch(_){}}
+  function replaceDBFromSync(next){db=normalizeDB(next);if(window.AlMezan)A.db=db;saveDB(true,{fromSync:true});try{updateAlerts()}catch(_){}try{window.dispatchEvent(new CustomEvent('almezan:data-synced',{detail:{view:state.view}}))}catch(_){}}
   function migrateLegacyDataToTenant(id){if(!id||hasTenantLocalData(id))return false;const legacy=localStorage.getItem(DB_BASE_KEY);if(!legacy)return false;try{const parsed=normalizeDB(JSON.parse(legacy));localStorage.setItem(scopedKey(DB_BASE_KEY,id),JSON.stringify(parsed));return true}catch(_){return false}}
   function switchTenant(id){id=String(id||tenantId()||'').trim();const migrated=migrateLegacyDataToTenant(id);db=loadDB();if(window.AlMezan)A.db=db;state.activeBranchId=localStorage.getItem(branchKey())||db.branches[0]?.id||'';try{state.cart=JSON.parse(localStorage.getItem(cartKey())||'[]')}catch(_){state.cart=[]}window.AlMezanSync?.resetForTenant?.(db);return{migrated,hasLocal:hasTenantLocalData(id)}}
   function atomicMutation(fn){const backup=clone(db);try{const out=fn();if(out&&typeof out.then==='function')return out.catch(err=>{db=normalizeDB(backup);saveDB(true);throw err});return out}catch(err){db=normalizeDB(backup);saveDB(true);throw err}}
@@ -332,7 +332,7 @@ function enhanceSelects(root=document){
   }
   const VIEW_MODULE={
     dashboard:'views.js',products:'views.js',units:'views.js',stock:'views.js',sales:'views.js',purchases:'views.js',transfers:'views.js',customers:'views.js',suppliers:'views.js',representatives:'views.js',debts:'views.js',vouchers:'views.js',cheques:'views.js',expenses:'views.js',
-    accounts:'admin.js',journals:'admin.js',reports:'admin.js',branches:'admin.js',warehouses:'admin.js',employees:'admin.js',audit:'admin.js',settings:'admin.js',barcodes:'admin.js',
+    accounts:'admin-runtime-738.js',journals:'admin-runtime-738.js',reports:'admin-runtime-738.js',branches:'admin-runtime-738.js',warehouses:'admin-runtime-738.js',employees:'admin-runtime-738.js',audit:'admin-runtime-738.js',settings:'admin-runtime-738.js',barcodes:'admin-runtime-738.js',
     'customer-groups':'pricing.js','price-groups':'pricing.js',cashier:'cashier.js',installments:'advanced.js',messaging:'advanced.js'
   };
   const viewRecovery=new Set();
