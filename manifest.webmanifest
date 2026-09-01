@@ -2,7 +2,7 @@
   "name": "الميزان برو للمحاسبة",
   "short_name": "الميزان برو",
   "description": "نظام محاسبة ومخزون وكاشير عربي متكامل",
-  "start_url": "./index.html",
+  "start_url": "./index.html?v=736#dashboard",
   "display": "standalone",
   "background_color": "#e8edf3",
   "theme_color": "#2367c9",
@@ -22,6 +22,6 @@
       "purpose": "any maskable"
     }
   ],
-  "id": "almezan-pro",
+  "id": "./?app=almezan-pro",
   "scope": "./"
 }
