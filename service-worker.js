@@ -1,9 +1,11 @@
-const BUILD='738';
+const BUILD='739';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v738-instant-cache`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v739-html-pages-cache`;
 const FILES=[
-  './index.html?v='+BUILD,'./dashboard.html?v='+BUILD,'./cashier.html?v='+BUILD,'./reports.html?v='+BUILD,'./README.html?v='+BUILD,'./admin.html?v='+BUILD,
-  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./views.js?v='+BUILD,'./admin-runtime-738.js?v='+BUILD,'./admin.js?v='+BUILD,'./master-admin.js?v='+BUILD,
+  './index.html?v='+BUILD,'./dashboard.html?v='+BUILD,'./cashier.html?v='+BUILD,'./README.html?v='+BUILD,'./admin.html?v='+BUILD,
+  './accounts.html?v='+BUILD,'./journals.html?v='+BUILD,'./reports.html?v='+BUILD,'./barcodes.html?v='+BUILD,
+  './branches.html?v='+BUILD,'./warehouses.html?v='+BUILD,'./employees.html?v='+BUILD,'./audit.html?v='+BUILD,'./settings.html?v='+BUILD,
+  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./views.js?v='+BUILD,'./admin-runtime-739.js?v='+BUILD,'./admin.js?v='+BUILD,'./master-admin.js?v='+BUILD,
   './pricing.js?v='+BUILD,'./cashier.js?v='+BUILD,'./enterprise.js?v='+BUILD,'./advanced.js?v='+BUILD,'./finance-pro.js?v='+BUILD,'./inventory-restaurant.js?v='+BUILD,'./variants-pro.js?v='+BUILD,'./variant-transfer.js?v='+BUILD,
   './app-icon-192.png?v='+BUILD,'./app-icon-512.png?v='+BUILD,'./app-icon.svg?v='+BUILD,'./brand-logo.png?v='+BUILD,'./barcode-scan.mp3?v='+BUILD,'./manifest.webmanifest?v='+BUILD
 ];

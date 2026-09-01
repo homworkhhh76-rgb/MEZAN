@@ -2,7 +2,7 @@
   "name": "الميزان برو للمحاسبة",
   "short_name": "الميزان برو",
   "description": "نظام محاسبة ومخزون وكاشير عربي متكامل",
-  "start_url": "./index.html?v=738#dashboard",
+  "start_url": "./index.html?v=739#dashboard",
   "display": "standalone",
   "background_color": "#e8edf3",
   "theme_color": "#2367c9",
