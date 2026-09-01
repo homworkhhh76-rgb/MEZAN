@@ -1346,8 +1346,5 @@ html.tablet-desktop .sidebar.open #logoutBtn{width:28px!important;height:28px!im
 .app-install-setting{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center}.app-install-head{display:flex;align-items:center;gap:10px;min-width:0}.app-install-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border-radius:10px;background:#edf4ff;color:#2367c9;border:1px solid #c9daf3}.app-install-head h3{margin:0!important}.app-install-head p{margin:2px 0 0!important;display:block!important;font-size:8.5px!important}.app-install-button{min-width:150px;justify-content:center}.app-install-button.is-installed{background:#edf9f2!important;color:#187849!important;border-color:#b7dfc7!important}.app-install-status{grid-column:1/-1;color:#6b7888;font-size:8px;border-top:1px dashed #d4dce5;padding-top:6px}
 @media(max-width:620px){.app-install-setting{grid-template-columns:1fr}.app-install-button{width:100%}}
 
-
-/* v7.38 — sync animation is visual-only; it must never disturb forms or sidebar layout. */
-.sync-button{contain:layout paint;isolation:isolate}
-.sync-button svg{pointer-events:none;transform-origin:50% 50%;transform-box:fill-box}
-.sync-button.is-syncing svg{will-change:transform}
+/* v7.39: sidebar items are real HTML page links */
+.main-nav a.nav-item{text-decoration:none}

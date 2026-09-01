@@ -1,1 +1,103 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="./"><meta http-equiv="refresh" content="0;url=./index.html?v=739#dashboard"><title>لوحة التحكم</title></head><body><p><a href="./index.html?v=739#dashboard">فتح لوحة التحكم</a></p></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <base href="./">
+  <meta name="theme-color" content="#0b1018">
+  <meta name="description" content="الميزان برو - نظام محاسبة وكاشير ومخزون عربي متكامل">
+  <title>لوحة التحكم — الميزان برو</title>
+  <link rel="icon" href="app-icon-192.png?v=739" type="image/png">
+  <link rel="manifest" href="manifest.webmanifest?v=739">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css?v=739">
+</head>
+<body>
+  <div id="loginScreen" class="login-screen login-enterprise">
+    <section class="login-brand-panel" aria-hidden="true">
+      <div class="login-brand-content">
+        <img src="brand-logo.png" class="login-brand-logo" alt="">
+        <div class="login-brand-copy">
+          <span class="login-kicker">AL-MEEZAN ERP</span>
+          <h1>الميزان المحاسبي</h1>
+          <p>إدارة المحاسبة والمبيعات والمخزون والكاشير من واجهة واحدة منظمة وآمنة.</p>
+        </div>
+        <div class="login-feature-grid">
+          <div><span data-icon="accounts"></span><b>محاسبة مترابطة</b><small>قيود وأرصدة لحظية</small></div>
+          <div><span data-icon="products"></span><b>مخزون متكامل</b><small>مستودعات ووحدات</small></div>
+          <div><span data-icon="cashier"></span><b>نقطة بيع سريعة</b><small>للجوال واللابتوب</small></div>
+          <div><span data-icon="reports"></span><b>تقارير دقيقة</b><small>مالية وتشغيلية</small></div>
+        </div>
+      </div>
+      <div class="login-brand-footer">الميزان برو · نظام إدارة مالي متكامل</div>
+    </section>
+    <main class="login-card-wrap">
+      <form id="loginForm" class="login-card login-card-pro" autocomplete="on" novalidate>
+        <div class="login-card-header">
+          <img src="brand-logo.png" class="login-card-logo" alt="شعار الميزان">
+          <div><span class="login-kicker">دخول مشفر</span><h2>ملف تفعيل الميزان</h2><p>اختر ملف الدخول الخاص بك. بعد التحقق الأول يعمل النظام أوف لاين بالكامل على هذا الجهاز.</p></div>
+        </div>
+        <div class="activation-drop" id="activationDrop">
+          <input id="activationFile" type="file" accept=".mzauth" hidden>
+          <div class="activation-file-icon" data-icon="file" data-size="30"></div>
+          <strong id="activationFileTitle">اسحب ملف التفعيل هنا أو اضغط للاختيار</strong>
+          <small id="activationFileInfo">ملفات الميزان المشفرة .mzauth</small>
+          <button type="button" class="btn btn-secondary btn-sm" id="chooseActivationFile"><span data-icon="upload"></span> اختيار الملف</button>
+        </div>
+        <div class="login-options"><span class="login-device-note"><span data-icon="wifi-off"></span> البيانات والصفحات محفوظة محلياً وتفتح حتى بدون إنترنت</span></div>
+        <p id="loginError" class="form-error login-error" role="alert"></p>
+        <button class="btn btn-primary btn-lg btn-block login-submit" id="loginSubmit" type="submit"><span data-icon="login"></span><span>فتح النظام</span></button>
+        <div class="login-demo-note"><span data-icon="info"></span><span>أول استخدام للملف يحتاج اتصالاً للتحقق. بعد ذلك يمكن الدخول والعمل أوف لاين، وتتم المزامنة تلقائياً عند توفر الإنترنت.</span></div>
+      </form>
+    </main>
+  </div>
+
+  <div id="appShell" class="app-shell" hidden>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-head">
+        <div class="brand-mark"><span></span><i></i><b></b></div>
+        <div><strong id="companyNameSide">الميزان برو</strong><small>نظام الإدارة المالية</small></div>
+        <button class="icon-button close-sidebar" id="closeSidebar" aria-label="إغلاق القائمة" data-icon="close"></button>
+      </div>
+      <nav id="mainNav" class="main-nav" aria-label="القائمة الرئيسية"></nav>
+      <div class="sidebar-foot">
+        <div class="user-chip"><span class="avatar" id="userAvatar">م</span><div><strong id="userNameSide">المدير</strong><small id="userRoleSide">مدير النظام</small></div></div>
+        <button class="icon-button" id="logoutBtn" title="تسجيل الخروج" data-icon="logout"></button>
+      </div>
+    </aside>
+
+    <section class="content-shell">
+      <header class="topbar">
+        <div class="topbar-start">
+          <button class="icon-button menu-button" id="openSidebar" aria-label="فتح القائمة" data-icon="menu"></button>
+          <div><h2 id="pageTitle">لوحة التحكم</h2><p id="pageSubtitle">نظرة عامة على الأداء المالي</p></div>
+        </div>
+        <div class="topbar-actions">
+          <div class="header-select branch-switcher" id="branchSwitcher"><span data-icon="branch"></span><select id="activeBranch" class="native-plain" aria-label="الفرع الحالي"></select></div>
+          <button class="icon-button sync-button" id="syncNowBtn" title="مزامنة الآن" aria-label="مزامنة الآن" data-icon="sync"><i id="syncPendingBadge"></i></button>
+          <button class="icon-button" id="globalSearchBtn" title="بحث سريع" data-icon="search"></button>
+          <button class="icon-button notification-button" id="notificationBtn" title="التنبيهات" data-icon="bell"><i id="alertBadge"></i></button>
+          <button class="user-menu" id="userMenuBtn"><span class="avatar" id="userAvatarTop">م</span><span id="userNameTop">المدير</span><span data-icon="chevron"></span></button>
+        </div>
+      </header>
+      <div id="offlineNotice" class="offline-notice" hidden><span data-icon="wifi-off"></span>أنت تعمل دون اتصال — كل العمليات محفوظة محلياً.</div>
+      <main id="workspace" class="workspace" tabindex="-1"></main>
+    </section>
+    <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السريع"></nav>
+  </div>
+
+  <div id="modalRoot" class="modal-root" aria-live="polite"></div>
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <input id="fileInput" type="file" hidden>
+  <script>window.ALMEZAN_PAGE_VIEW="dashboard";try{if(!location.hash)history.replaceState(null,"",location.pathname+location.search+"#dashboard")}catch(_){}</script>
+  <script src="activation-runtime.js?v=739"></script>
+  <script src="app.js?v=739"></script>
+  <script src="bluetooth-printer.js?v=739"></script>
+  <script src="almezan-sync.js?v=739"></script>
+  <!-- v7.39: كل صفحة في ملف HTML مستقل، مع نفس محرك النظام والبيانات -->
+  <script src="pages-bundle.js?v=739"></script>
+</body>
+</html>

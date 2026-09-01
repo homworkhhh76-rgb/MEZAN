@@ -6,7 +6,7 @@
   <base href="./">
   <meta name="theme-color" content="#0b1018">
   <meta name="description" content="الميزان برو - نظام محاسبة وكاشير ومخزون عربي متكامل">
-  <title>سجل العمليات - الميزان برو</title>
+  <title>سجل العمليات — الميزان برو</title>
   <link rel="icon" href="app-icon-192.png?v=739" type="image/png">
   <link rel="manifest" href="manifest.webmanifest?v=739">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="app.css?v=739">
 </head>
-<body data-entry-view="audit">
+<body>
   <div id="loginScreen" class="login-screen login-enterprise">
     <section class="login-brand-panel" aria-hidden="true">
       <div class="login-brand-content">
@@ -92,19 +92,12 @@
   <div id="modalRoot" class="modal-root" aria-live="polite"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
   <input id="fileInput" type="file" hidden>
+  <script>window.ALMEZAN_PAGE_VIEW="audit";try{if(!location.hash)history.replaceState(null,"",location.pathname+location.search+"#audit")}catch(_){}</script>
   <script src="activation-runtime.js?v=739"></script>
   <script src="app.js?v=739"></script>
   <script src="bluetooth-printer.js?v=739"></script>
   <script src="almezan-sync.js?v=739"></script>
-  <script src="views.js?v=739"></script>
-  <script src="admin-runtime-739.js?v=739"></script>
-  <script src="pricing.js?v=739"></script>
-  <script src="cashier.js?v=739"></script>
-  <script src="enterprise.js?v=739"></script>
-  <script src="advanced.js?v=739"></script>
-  <script src="finance-pro.js?v=739"></script>
-  <script src="inventory-restaurant.js?v=739"></script>
-  <script src="variants-pro.js?v=739"></script>
-  <script src="variant-transfer.js?v=739"></script>
+  <!-- v7.39: كل صفحة في ملف HTML مستقل، مع نفس محرك النظام والبيانات -->
+  <script src="pages-bundle.js?v=739"></script>
 </body>
 </html>
