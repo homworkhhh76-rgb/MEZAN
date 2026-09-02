@@ -7,7 +7,7 @@
   const META_PREFIX='almezan_sync_meta_v1::';
   const PENDING_PREFIX='almezan_sync_pending_v1::';
   const DEVICE_KEY='almezan_device_id_v1';
-  const IDB_NAME='almezan_offline_v1',IDB_STORE='tenants';
+  const IDB_NAME='almezan_offline_v1',IDB_STORE='tenants',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
   let initializedTenant='', snapshot=null, busy=false, suppress=false, timer=null;
   const safe=v=>String(v??'').trim();
   const clone=v=>JSON.parse(JSON.stringify(v));
@@ -80,7 +80,23 @@
   }
 
   function openIdb(){return new Promise((resolve,reject)=>{if(!('indexedDB'in window))return resolve(null);const req=indexedDB.open(IDB_NAME,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'tenantId'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
-  async function mirrorDb(db){const t=tenant();if(!t)return;const idb=await openIdb();if(!idb)return;await new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put({tenantId:t,db:clone(db),savedAt:Date.now()});tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)});idb.close()}
+  function compactMirrorDb(source,level=1){
+    const x=clone(source||{});
+    // لا نحذف الفواتير أو القيود أو الحركات المحاسبية. التنظيف يقتصر على السجلات الثانوية القابلة لإعادة البناء.
+    const limits=level>1?{audit:120,notifications:80,chatMessages:120,heldOrders:40}:{audit:500,notifications:200,chatMessages:300,heldOrders:100};
+    for(const [k,max] of Object.entries(limits))if(Array.isArray(x[k])&&x[k].length>max)x[k]=x[k].slice(-max);
+    return x
+  }
+  async function putMirrorRecord(idb,record){return new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put(record);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('IndexedDB write failed'));tx.onabort=()=>reject(tx.error||new Error('IndexedDB write aborted'))})}
+  async function mirrorDb(db,opts={}){
+    const t=tenant();if(!t)return;const idb=await openIdb();if(!idb)return;const savedAt=Number(opts.savedAt)||Date.now();
+    try{await putMirrorRecord(idb,{tenantId:t,db:clone(db),savedAt})}
+    catch(err){
+      // عند امتلاء حصة المتصفح نحذف/نضغط الأقدم من السجلات الثانوية فقط، ونحافظ على المحاسبة والمخزون والفواتير.
+      try{await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,1),savedAt,compacted:true})}
+      catch(_){await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,2),savedAt,compacted:true})}
+    }finally{idb.close()}
+  }
   async function readMirror(t=tenant()){if(!t)return null;const idb=await openIdb();if(!idb)return null;const result=await new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readonly'),req=tx.objectStore(IDB_STORE).get(t);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});idb.close();return result}
 
   function cloudPath(dataset,key){return `${basePath()}/${encodeURIComponent(dataset)}/${encodeURIComponent(key)}`}
@@ -118,7 +134,12 @@
 
   async function initialize(db,{seed=false}={}){
     const t=tenant();if(!t)return{tenant:''};initializedTenant=t;
-    const mirror=await readMirror(t).catch(()=>null);if(mirror?.db&&window.AlMezan?.hasTenantLocalData?.()===false){suppress=true;try{window.AlMezan.replaceDBFromSync(mirror.db)}finally{suppress=false}db=window.AlMezan.db}
+    // اطلب التخزين الدائم بهدوء؛ المتصفح يقرر الحصة الأكبر المتاحة بدون واجهة داخل البرنامج.
+    try{await navigator.storage?.persist?.()}catch(_){}
+    const mirror=await readMirror(t).catch(()=>null),fastSavedAt=Number(localStorage.getItem(DB_SAVED_PREFIX+encodeURIComponent(t))||0);
+    if(mirror?.db&&(window.AlMezan?.hasTenantLocalData?.()===false||Number(mirror.savedAt||0)>fastSavedAt)){
+      suppress=true;try{window.AlMezan.replaceDBFromSync(mirror.db)}finally{suppress=false}db=window.AlMezan.db
+    }
     snapshot=snapshotDb(db||window.AlMezan?.db||{});if(seed)seedAll(db||window.AlMezan.db);emitStatus();return{tenant:t,pending:pendingCount(),mirror:!!mirror}
   }
   function resetForTenant(db){initializedTenant=tenant();snapshot=snapshotDb(db||{});emitStatus()}

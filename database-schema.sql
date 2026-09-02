@@ -1027,3 +1027,120 @@ CREATE TABLE IF NOT EXISTS item_default_units (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_item_default_units_unit ON item_default_units(unit_id);
+
+-- ============================================================
+-- Al-Meezan Pro v7.50 — Hierarchical Expenses / Analytics / Branch Transfers
+-- ============================================================
+-- The browser app remains local-first and synchronizes its JSON datasets to Turso.
+-- These normalized tables document the production relational model and can be used
+-- by server/API implementations without changing the offline client contract.
+
+CREATE TABLE IF NOT EXISTS expense_accounts_v750 (
+  account_id       TEXT PRIMARY KEY,
+  company_id       TEXT NOT NULL,
+  account_code     TEXT NOT NULL,
+  account_name     TEXT NOT NULL,
+  parent_id        TEXT REFERENCES expense_accounts_v750(account_id) ON DELETE RESTRICT,
+  is_leaf          INTEGER NOT NULL DEFAULT 1 CHECK(is_leaf IN (0,1)),
+  normal_side      TEXT NOT NULL DEFAULT 'debit' CHECK(normal_side='debit'),
+  active           INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+  UNIQUE(company_id, account_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_expense_accounts_v750_parent
+ON expense_accounts_v750(company_id, parent_id, active);
+
+-- Recursive aggregation: balance of every expense node from all descendant leaves.
+-- journal_lines is expected to contain account_id/local_debit/local_credit.
+WITH RECURSIVE expense_tree(root_id, account_id) AS (
+  SELECT account_id, account_id FROM expense_accounts_v750
+  UNION ALL
+  SELECT t.root_id, c.account_id
+  FROM expense_tree t
+  JOIN expense_accounts_v750 c ON c.parent_id=t.account_id
+)
+SELECT t.root_id,
+       ROUND(COALESCE(SUM(COALESCE(jl.local_debit, jl.debit, 0)-COALESCE(jl.local_credit, jl.credit, 0)),0),2) AS balance
+FROM expense_tree t
+LEFT JOIN journal_lines jl ON jl.account_id=t.account_id
+GROUP BY t.root_id;
+
+CREATE TABLE IF NOT EXISTS projects_v750 (
+  id          TEXT PRIMARY KEY,
+  company_id  TEXT NOT NULL,
+  code        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  parent_id   TEXT REFERENCES projects_v750(id) ON DELETE RESTRICT,
+  is_leaf     INTEGER NOT NULL DEFAULT 1 CHECK(is_leaf IN (0,1)),
+  active      INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+  UNIQUE(company_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS branch_managers_v750 (
+  branch_id    TEXT PRIMARY KEY REFERENCES branches(id) ON DELETE CASCADE,
+  employee_id  TEXT NOT NULL,
+  assigned_at  TEXT NOT NULL,
+  auth_version TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS branch_transfer_requests_v750 (
+  id              TEXT PRIMARY KEY,
+  company_id      TEXT NOT NULL,
+  number          TEXT NOT NULL,
+  request_date    TEXT NOT NULL,
+  from_branch_id  TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+  to_branch_id    TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+  status          TEXT NOT NULL CHECK(status IN ('requested','in_transit','received','cancelled')),
+  requested_by    TEXT,
+  notes           TEXT,
+  created_at      TEXT NOT NULL,
+  UNIQUE(company_id, number)
+);
+
+CREATE TABLE IF NOT EXISTS branch_transfer_request_lines_v750 (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id  TEXT NOT NULL REFERENCES branch_transfer_requests_v750(id) ON DELETE CASCADE,
+  product_id  TEXT NOT NULL,
+  qty_base    REAL NOT NULL CHECK(qty_base > 0)
+);
+
+CREATE TABLE IF NOT EXISTS branch_transfers_v750 (
+  id                 TEXT PRIMARY KEY,
+  company_id         TEXT NOT NULL,
+  number             TEXT NOT NULL,
+  request_id         TEXT REFERENCES branch_transfer_requests_v750(id),
+  transfer_date      TEXT NOT NULL,
+  from_branch_id     TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+  to_branch_id       TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+  from_warehouse_id  TEXT NOT NULL,
+  to_warehouse_id    TEXT,
+  status             TEXT NOT NULL CHECK(status IN ('in_transit','received','cancelled')),
+  total_value        REAL NOT NULL DEFAULT 0,
+  landing_cost       REAL NOT NULL DEFAULT 0,
+  shortage_value     REAL NOT NULL DEFAULT 0,
+  locked             INTEGER NOT NULL DEFAULT 0 CHECK(locked IN (0,1)),
+  created_at         TEXT NOT NULL,
+  received_at        TEXT,
+  UNIQUE(company_id, number)
+);
+
+CREATE TABLE IF NOT EXISTS branch_transfer_lines_v750 (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_id         TEXT NOT NULL REFERENCES branch_transfers_v750(id) ON DELETE CASCADE,
+  product_id          TEXT NOT NULL,
+  shipped_qty_base    REAL NOT NULL,
+  received_qty_base   REAL,
+  shortage_qty_base   REAL NOT NULL DEFAULT 0,
+  unit_cost           REAL NOT NULL DEFAULT 0,
+  line_value          REAL NOT NULL DEFAULT 0,
+  allocated_landing   REAL NOT NULL DEFAULT 0
+);
+
+-- v7.50 receiving-warehouse average cost after landed-cost allocation.
+CREATE TABLE IF NOT EXISTS warehouse_costs_v750 (
+  product_id TEXT NOT NULL,
+  warehouse_id TEXT NOT NULL,
+  average_cost REAL NOT NULL DEFAULT 0,
+  updated_at TEXT,
+  PRIMARY KEY (product_id, warehouse_id)
+);

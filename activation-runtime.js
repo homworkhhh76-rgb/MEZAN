@@ -103,7 +103,7 @@
   function markVerified(payload,access){const all=verificationMap();all[payload.fileId]={fileId:payload.fileId,companyId:payload.companyId||payload.tenantId,companyKey:payload.companyKey||payload.activationKey,accountId:payload.account?.id||'',authVersion:payload.account?.authVersion||'',status:access?.status||'active',expiresAt:access?.endAt||payload.expiresAt||'',verifiedAt:Date.now()};localStorage.setItem(VERIFIED_KEY,JSON.stringify(all));return all[payload.fileId]}
   function cachedVerification(payload){const v=verificationMap()[payload?.fileId];if(!v)return null;if(v.companyId!==String(payload.companyId||payload.tenantId||''))return null;if(v.companyKey!==String(payload.companyKey||payload.activationKey||''))return null;if(v.accountId!==String(payload.account?.id||''))return null;if(String(v.authVersion||'')!==String(payload.account?.authVersion||''))return null;if(v.status!=='active')return null;if(v.expiresAt&&Date.now()>=new Date(v.expiresAt).getTime())return null;return v}
 
-  function accountPath(payload){const companyId=encodeURIComponent(String(payload.companyId||payload.tenantId||''));const base=`almezan/companies/${companyId}`;if(payload.type==='company-manager')return `${base}/access/company`;return `${base}/d/employees/${encodeURIComponent(String(payload.account?.id||''))}`}
+  function accountPath(payload){const companyId=encodeURIComponent(String(payload.companyId||payload.tenantId||''));const base=`almezan/companies/${companyId}`;if(payload.type==='company-manager')return `${base}/access/company`;if(payload.type==='branch-manager')return `${base}/d/branchManagers/${encodeURIComponent(String(payload.account?.id||''))}`;return `${base}/d/employees/${encodeURIComponent(String(payload.account?.id||''))}`}
   function unwrapRecord(value){if(value&&typeof value==='object'&&Object.prototype.hasOwnProperty.call(value,'v'))return value.deleted?null:value.v;return value}
   async function verifyCompanyAccessRemote(payload){
     const db=payload?.database||readDatabaseAccess(payload?.companyId)||{},companyId=String(payload?.companyId||payload?.tenantId||'');
@@ -124,13 +124,13 @@
     if(payload.type==='company-manager'){
       const row=access.manager;if(!row||row.active===false)throw new Error('حساب مدير الشركة غير متاح.');if(String(row.id||'')!==String(account.id||''))throw new Error('ملف المدير لا يطابق الحساب المسجل.');if(String(row.authVersion||'')!==String(account.authVersion||''))throw new Error('تم إصدار ملف مدير أحدث. استخدم الملف الجديد.');
     }else{
-      const row=unwrapRecord(await readExact(db,accountPath(payload)));if(!row)throw new Error('الحساب غير موجود في قاعدة الشركة أو لم تتم مزامنته بعد.');if(row.active===false)throw new Error('تم إيقاف هذا الحساب.');if(String(row.authVersion||'')!==String(account.authVersion||''))throw new Error('تم إصدار ملف دخول أحدث لهذا الحساب.');if(payload.type==='representative'&&String(row.role||'')!=='مندوب')throw new Error('الحساب لم يعد مندوباً.');
+      const row=unwrapRecord(await readExact(db,accountPath(payload)));if(!row)throw new Error('الحساب غير موجود في قاعدة الشركة أو لم تتم مزامنته بعد.');if(row.active===false)throw new Error('تم إيقاف هذا الحساب.');if(String(row.authVersion||'')!==String(account.authVersion||''))throw new Error('تم إصدار ملف دخول أحدث لهذا الحساب.');if(payload.type==='representative'&&String(row.role||'')!=='مندوب')throw new Error('الحساب لم يعد مندوباً.');if(payload.type==='branch-manager'&&String(row.role||'')!=='مدير فرع')throw new Error('حساب مدير الفرع غير متاح.');
     }
     markVerified(payload,access);return {access,online:true};
   }
   function isLogicalVerificationError(error){
     const msg=String(error?.message||error||'');
-    return /مفتاح الشركة غير مسجل|لا يطابق|تم إيقاف|انتهت مدة|غير متاح|تم إصدار ملف|الحساب غير موجود|تم إيقاف هذا الحساب|لم يعد مندوباً/.test(msg);
+    return /مفتاح الشركة غير مسجل|لا يطابق|تم إيقاف|انتهت مدة|غير متاح|تم إصدار ملف|الحساب غير موجود|تم إيقاف هذا الحساب|لم يعد مندوباً|مدير الفرع غير متاح/.test(msg);
   }
   async function verifyPayload(payload,{allowOffline=true}={}){
     if(navigator.onLine!==false){

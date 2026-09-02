@@ -1368,3 +1368,383 @@ html.tablet-desktop .sidebar.open #logoutBtn{width:28px!important;height:28px!im
 
 /* v7.49 invoice print singleton */
 body.printing .print-view{background:#fff;}
+
+/* v7.50 — enterprise ledgers / analytical trees / branch transfers */
+.v750-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px}.v750-tabs button{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:10px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer}.v750-tabs button.active{background:var(--primary-soft);border-color:rgba(45,114,206,.3);color:var(--primary)}
+.party-ledger-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}.party-ledger-summary>div{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface-soft)}.party-ledger-summary small{display:block;color:var(--muted);margin-bottom:4px}.party-ledger-summary strong{font-size:18px}.party-ledger-export{display:flex;gap:8px;justify-content:flex-start;margin-bottom:10px}
+.v750-transfer-line{display:grid;grid-template-columns:minmax(220px,1fr) 150px 40px;gap:8px;align-items:end;margin:8px 0}.v750-transfer-line select,.v750-transfer-line input{height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:0 10px;color:var(--text)}
+@media(max-width:760px){.party-ledger-summary{grid-template-columns:1fr 1fr}.v750-transfer-line{grid-template-columns:1fr 100px 38px}.v750-tabs{display:grid;grid-template-columns:1fr 1fr}.v750-tabs button{padding:8px 6px}}
+
+/* ===== v7.52: compact sync counter + transfer precision + cashier middle search ===== */
+.sync-button i{
+  top:-3px!important;left:-3px!important;min-width:12px!important;width:auto!important;height:12px!important;
+  padding:0 2.5px!important;border-radius:7px!important;font-size:7px!important;line-height:12px!important;
+  box-shadow:0 0 0 1px #fff!important;
+}
+.v752-transfer-page{min-width:0;overflow:hidden}
+.v752-transfer-page .grid-2{align-items:start;min-width:0}
+.v752-transfer-page .panel{min-width:0;overflow:hidden}
+.v752-transfer-page .table-wrap,.modal .table-wrap{max-width:100%;overflow-x:auto!important;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-inline:contain;direction:ltr;padding-bottom:3px}
+.v752-transfer-page .data-table,.modal .v750-receive-line{direction:rtl}
+.v752-transfer-page .data-table{min-width:690px;width:max-content;max-width:none}
+.v752-transfer-page .data-table th,.v752-transfer-page .data-table td{white-space:nowrap}
+.v752-transfer-receive-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+.v752-transfer-receive-grid .field{min-width:0!important}
+.v752-transfer-receive-grid input,.v752-transfer-receive-grid select,.v752-transfer-receive-grid .custom-select-trigger{height:44px!important;min-height:44px!important}
+.cashier-catalog-search-v752{height:38px;max-width:430px;margin:7px auto 10px;display:flex;align-items:center;gap:7px;border:1px solid #cbd5df;border-radius:11px;background:#fff;padding:0 11px;color:#607182;box-shadow:0 1px 2px rgba(25,45,66,.04)}
+.cashier-catalog-search-v752 input{border:0!important;outline:0!important;background:transparent!important;width:100%;min-width:0;height:34px;font:inherit;font-size:12px;color:#1e2c3b;padding:0!important}
+.cashier-catalog-search-v752:focus-within{border-color:#7faee6;box-shadow:0 0 0 2px rgba(35,103,201,.07)}
+.rep-branch-rate-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media(max-width:700px){
+  .v752-transfer-page .grid-2{grid-template-columns:1fr!important}
+  .v752-transfer-page .data-table{min-width:680px}
+  .v752-transfer-receive-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .rep-branch-rate-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cashier-catalog-search-v752{width:calc(100% - 16px);max-width:none;height:36px;margin:6px 8px 9px}
+}
+
+/* v7.53 — transfer documents, multi-line internal transfer, stable cashier catalog search */
+.v753-transfer-page{min-width:0;overflow:hidden}
+.v753-transfer-grids{align-items:start;min-width:0}
+.v753-transfer-page .panel{min-width:0;overflow:hidden}
+.v753-transfer-page .table-wrap{max-width:100%;overflow-x:auto!important;overflow-y:hidden;-webkit-overflow-scrolling:touch;direction:ltr;padding-bottom:4px}
+.v753-transfer-page .data-table{direction:rtl;min-width:850px;width:max-content;max-width:none}
+.v753-transfer-page .data-table th,.v753-transfer-page .data-table td{white-space:nowrap}
+.transfer-doc-actions{gap:4px;flex-wrap:nowrap}.transfer-doc-actions .icon-button{width:31px;height:31px;flex-basis:31px}
+.v753-internal-line{display:grid;grid-template-columns:minmax(240px,1fr) 135px 38px;gap:8px;align-items:center;margin:8px 0}
+.v753-internal-line>input,.v753-internal-line>select{height:42px;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:0 10px;color:var(--text)}
+.cashier-section-title{gap:8px}
+.cashier-section-title>div:first-child{flex:0 0 auto}
+.cashier-section-title>.badge{flex:0 0 auto}
+.cashier-catalog-search-v752.cashier-catalog-search-v753{order:2;flex:0 1 260px;width:min(260px,38vw);max-width:260px;height:31px;margin:0 auto!important;border-radius:8px;padding:0 8px;box-shadow:none;background:#fff}
+.cashier-catalog-search-v753 input{height:28px!important;font-size:10.5px!important}
+.cashier-section-title .cashier-catalog-search-v753+ .badge{order:3}
+@media(max-width:760px){
+ .v753-transfer-page .grid-2{grid-template-columns:1fr!important}
+ .v753-transfer-page .data-table{min-width:820px}
+ .v753-internal-line{grid-template-columns:minmax(0,1fr) 92px 36px;gap:6px}
+ .cashier-section-title{display:grid!important;grid-template-columns:auto minmax(95px,1fr) auto;align-items:center;gap:5px}
+ .cashier-section-title>div:first-child{min-width:0}
+ .cashier-section-title>div:first-child h3{font-size:10px;white-space:nowrap}
+ .cashier-catalog-search-v752.cashier-catalog-search-v753{width:100%;max-width:none;min-width:0;height:30px;margin:0!important;padding:0 7px}
+ .cashier-catalog-search-v753 input{font-size:10px!important}
+ .cashier-section-title>.badge{font-size:8px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+
+/* ===== v7.54: RTL tables, account hierarchy, compact stable cashier controls ===== */
+.data-table-block,.table-wrap,.employee-table-panel{width:100%!important;max-width:100%!important;min-width:0!important}
+.table-wrap,
+.v752-transfer-page .table-wrap,
+.v753-transfer-page .table-wrap,
+.modal .table-wrap{
+  direction:rtl!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-inline:contain;
+  padding-left:0!important;
+  padding-right:0!important;
+  scrollbar-gutter:auto!important;
+}
+.data-table,
+.v752-transfer-page .data-table,
+.v753-transfer-page .data-table{
+  direction:rtl!important;
+  width:max-content!important;
+  min-width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+}
+.data-table th,.data-table td{text-align:right}
+.data-table th:last-child,.data-table td:last-child{padding-left:8px!important}
+.employee-table-panel .data-table{min-width:max(100%,720px)!important}
+.account-child-row{position:relative;background:linear-gradient(to left,rgba(35,103,201,.025),transparent 42%)}
+.account-child-row .account-title{padding-inline-start:calc(min(5,var(--account-level))*10px)}
+.account-child-mark{display:inline-flex;align-items:center;justify-content:center;margin-inline-end:5px;color:var(--primary);font-weight:900}
+.account-root-row .account-title>b{font-weight:800}
+.cart-price-change{color:#2367c9!important;background:#eff6ff!important;border-color:#b9d2ef!important}
+.cashier-search-empty{margin:12px 0!important;min-height:120px!important}
+.settings-install-only{max-width:760px;margin:20px auto!important}
+@media(max-width:760px){
+ .data-table{min-width:max(100%,640px)!important}
+ .employee-table-panel .data-table{min-width:700px!important}
+ .account-child-row .account-title{padding-inline-start:5px!important}
+}
+
+/* ===== v7.55: restore compact mobile geometry + customer/report/finance polish ===== */
+.customer-kpis-v755,.stock-overview-v755{margin-bottom:14px}
+.expense-filter-v755{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.expense-filter-v755 .field{margin:0;min-width:170px;flex:1}
+.expense-filter-v755 .date-range{display:flex;gap:7px;flex:1.5;min-width:270px}
+.expense-filter-v755 .date-range .field{min-width:125px}
+.financial-periods-v755 .financial-archive-panel{margin-top:14px}
+.financial-periods-v755 .cc-tree-name{white-space:nowrap}
+.stock-insights-v755 .metric-grid.stock-overview-v755{grid-template-columns:repeat(4,minmax(0,1fr))}
+.tax-kpis-v755{margin-bottom:14px}
+.workers-v755 .stat-strip,.payroll-v755 .stat-strip{margin-bottom:14px}
+
+@media(max-width:760px){
+  /* Return the whole mobile workspace to the compact proportions used before the wide-table regressions. */
+  .workspace{padding:10px!important;min-width:0!important;overflow-x:hidden!important}
+  .panel,.card{padding:11px!important;min-width:0!important;max-width:100%!important}
+  .panel-head{gap:7px!important;align-items:flex-start!important;flex-wrap:wrap!important}
+  .panel-head>div{min-width:0!important}
+  .panel-head h3{font-size:12px!important}
+  .panel-head small{font-size:8.5px!important;line-height:1.45!important}
+
+  /* RTL table viewport: starts at the right edge, never leaves a large blank strip on the left. */
+  .data-table-block{width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden!important}
+  .table-wrap,
+  .employee-table-panel .table-wrap,
+  .v752-transfer-page .table-wrap,
+  .v753-transfer-page .table-wrap,
+  .modal .table-wrap{
+    direction:rtl!important;
+    width:calc(100% + 22px)!important;
+    max-width:calc(100% + 22px)!important;
+    min-width:0!important;
+    margin-inline:-11px!important;
+    padding:0!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    scroll-snap-type:none!important;
+    scrollbar-gutter:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  .data-table,
+  .v752-transfer-page .data-table,
+  .v753-transfer-page .data-table,
+  .financial-periods-page .data-table,
+  .taxes-v755 .data-table{
+    direction:rtl!important;
+    width:100%!important;
+    min-width:520px!important;
+    max-width:none!important;
+    margin:0!important;
+    table-layout:auto!important;
+    font-size:8.8px!important;
+  }
+  .employee-table-panel .data-table,
+  .workers-v755 .data-table,
+  .payroll-v755 .data-table{min-width:590px!important}
+  .customers-v755 .data-table{min-width:590px!important}
+  .financial-periods-v755 .data-table{min-width:560px!important}
+  .stock-insights-v755 .data-table,.taxes-v755 .data-table{min-width:520px!important}
+  .data-table th,.data-table td{
+    padding:6px 5px!important;
+    text-align:right!important;
+    white-space:normal!important;
+    word-break:normal!important;
+    overflow-wrap:anywhere!important;
+    line-height:1.35!important;
+    height:auto!important;
+  }
+  .data-table th{font-size:8.2px!important;white-space:nowrap!important}
+  .data-table td b{font-size:9px!important}
+  .data-table td small{font-size:7.5px!important}
+  .data-table .table-actions{display:flex!important;gap:3px!important;flex-wrap:nowrap!important;white-space:nowrap!important;justify-content:flex-start!important}
+  .data-table .icon-button{width:30px!important;height:30px!important;min-width:30px!important;flex:0 0 30px!important;padding:0!important}
+  .data-table .btn-sm{min-height:30px!important;padding:4px 7px!important;font-size:8px!important;white-space:nowrap!important}
+  .table-export-toolbar{padding:6px 4px!important;gap:5px!important;flex-wrap:wrap!important}
+  .table-export-toolbar .btn{min-height:30px!important;padding:4px 8px!important;font-size:8px!important}
+  .table-export-label{font-size:8px!important}
+
+  /* Dense, balanced KPI cards on phones. */
+  .financial-periods-v755 .stat-strip,
+  .customers-v755 .stat-strip,
+  .taxes-v755 .stat-strip,
+  .payroll-v755 .stat-strip,
+  .workers-v755 .stat-strip{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:7px!important;
+  }
+  .stat-strip>div{padding:9px!important;min-width:0!important}
+  .stat-strip small{font-size:8px!important}
+  .stat-strip strong{font-size:13px!important;overflow-wrap:anywhere}
+
+  .financial-periods-v755 .grid-2,
+  .taxes-v755 .grid-2{grid-template-columns:1fr!important;gap:10px!important}
+  .financial-periods-v755 .field,.taxes-v755 .field{min-width:0!important;width:100%!important}
+
+  .expense-filter-v755{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:7px!important;width:100%!important}
+  .expense-filter-v755 .field{min-width:0!important;width:100%!important}
+  .expense-filter-v755 .date-range{grid-column:1/-1;display:grid!important;grid-template-columns:1fr 1fr!important;min-width:0!important;width:100%!important;gap:7px!important}
+  .expense-filter-v755 .btn{grid-column:1/-1;width:100%!important}
+  .expense-filter-v755 select,.expense-filter-v755 input{height:36px!important;font-size:9px!important}
+
+  .stock-overview-v755{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  .stock-insights-v755 .stats-grid,.stock-insights-v755 .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  .stock-insights-v755 .metric-card,.stock-insights-v755 .card{padding:9px!important;min-width:0!important}
+  .stock-insights-v755 .metric-card strong{font-size:14px!important}
+  .stock-insights-v755 .metric-card span,.stock-insights-v755 .metric-card small{font-size:8px!important}
+
+  /* Tax page and report cards must never create horizontal page overflow. */
+  .taxes-v755,.financial-periods-v755,.customers-v755,.workers-v755,.payroll-v755,.stock-insights-v755{width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:hidden!important}
+  .taxes-v755 .form-grid,.financial-periods-v755 .form-grid{grid-template-columns:1fr!important}
+  .taxes-v755 input,.taxes-v755 select,.taxes-v755 textarea{max-width:100%!important}
+}
+
+@media(max-width:420px){
+  .data-table,
+  .v752-transfer-page .data-table,
+  .v753-transfer-page .data-table,
+  .taxes-v755 .data-table{min-width:500px!important}
+  .employee-table-panel .data-table,.workers-v755 .data-table,.payroll-v755 .data-table,.customers-v755 .data-table{min-width:560px!important}
+  .financial-periods-v755 .data-table{min-width:530px!important}
+  .workspace{padding:8px!important}
+  .panel,.card{padding:9px!important}
+  .table-wrap,.employee-table-panel .table-wrap,.v752-transfer-page .table-wrap,.v753-transfer-page .table-wrap,.modal .table-wrap{width:calc(100% + 18px)!important;max-width:calc(100% + 18px)!important;margin-inline:-9px!important}
+}
+
+/* v7.55 report mobile controls */
+.reports-v755 .reports-filter-v755{align-items:end;gap:8px;flex-wrap:wrap}
+.reports-v755 .report-summary-v755{min-width:0}
+@media(max-width:760px){
+ .reports-v755{width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:hidden!important}
+ .reports-v755 .reports-filter-v755{display:grid!important;grid-template-columns:1fr!important;width:100%!important;gap:7px!important}
+ .reports-v755 .reports-filter-v755 .filter-select{width:100%!important;min-width:0!important}
+ .reports-v755 .reports-filter-v755 .date-range{width:100%!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important}
+ .reports-v755 .reports-filter-v755 .date-range input{width:100%!important;min-width:0!important}
+ .reports-v755 .reports-filter-v755 .btn{width:100%!important}
+ .reports-v755 .data-table{min-width:520px!important}
+}
+
+
+/* ===== v7.56: restore table presentation/flow from v7.49 only =====
+   Keep all v7.50–v7.56 business logic and 50-row virtual paging.
+   This block only returns table geometry, scrolling and cell layout to v7.49. */
+.data-table-block,
+.employee-table-panel{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow:visible!important;
+}
+.table-wrap,
+.employee-table-panel .table-wrap,
+.v752-transfer-page .table-wrap,
+.v753-transfer-page .table-wrap,
+.modal .table-wrap{
+  width:auto!important;
+  max-width:none!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:0!important;
+  direction:inherit!important;
+  overflow:auto!important;
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior:auto!important;
+  scrollbar-gutter:auto!important;
+  border:1px solid var(--line)!important;
+  border-radius:5px!important;
+}
+.data-table,
+.v752-transfer-page .data-table,
+.v753-transfer-page .data-table,
+.financial-periods-page .data-table,
+.financial-periods-v755 .data-table,
+.customers-v755 .data-table,
+.workers-v755 .data-table,
+.payroll-v755 .data-table,
+.stock-insights-v755 .data-table,
+.taxes-v755 .data-table,
+.reports-v755 .data-table,
+.employee-table-panel .data-table{
+  direction:inherit!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  margin:0!important;
+  table-layout:auto!important;
+  border-collapse:collapse!important;
+  white-space:nowrap!important;
+  font-size:10px!important;
+}
+.data-table th,
+.data-table td{
+  padding:7px 8px!important;
+  text-align:right!important;
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+  line-height:normal!important;
+  height:auto!important;
+}
+.data-table th{
+  position:sticky!important;
+  top:0!important;
+  z-index:1!important;
+  background:#e6ebf0!important;
+  color:#3d4a59!important;
+  font-size:10px!important;
+  font-weight:500!important;
+  border-bottom:1px solid var(--line)!important;
+}
+.data-table td{
+  border-bottom:1px solid var(--line-soft)!important;
+  vertical-align:middle!important;
+  font-size:10px!important;
+}
+.data-table td b{font-size:inherit!important}
+.data-table td small{font-size:inherit!important}
+.data-table tbody tr:last-child td{border-bottom:0!important}
+.data-table tbody tr:hover{background:rgba(255,255,255,.015)!important}
+.data-table .table-actions,
+.table-actions{
+  display:flex!important;
+  gap:5px!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap!important;
+  justify-content:flex-start!important;
+}
+.data-table .table-actions .icon-button,
+.table-actions .icon-button{
+  width:33px!important;
+  height:33px!important;
+  min-width:33px!important;
+  flex:0 0 33px!important;
+  padding:0!important;
+}
+.table-name{display:flex!important;align-items:center!important;gap:9px!important;white-space:nowrap!important}
+.table-product-thumb{width:30px!important;height:30px!important;object-fit:cover!important;border-radius:5px!important;border:1px solid var(--line)!important;flex:0 0 30px!important}
+.table-export-toolbar{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;padding:8px 2px 10px!important;min-height:42px!important;flex-wrap:nowrap!important}
+.table-export-label{display:inline!important;margin-inline-end:auto!important;color:var(--muted)!important;font-size:11px!important;font-weight:700!important}
+.table-export-button{height:34px!important;display:inline-flex!important;align-items:center!important;gap:6px!important;border:1px solid var(--line)!important;border-radius:10px!important;padding:4px 9px!important;font-size:11px!important;font-weight:800!important;white-space:nowrap!important}
+.table-pagination{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;padding:14px 2px 0!important}
+.pagination-summary{color:var(--muted)!important;font-size:11px!important}
+.pagination-controls{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important}
+.pagination-pages{display:flex!important;align-items:center!important;gap:5px!important;max-width:min(58vw,560px)!important;overflow:auto!important;padding:2px!important}
+.page-button,.page-nav{height:34px!important;font-size:12px!important}
+.page-button{width:34px!important;flex:0 0 34px!important}
+
+/* Keep the one explicit wide archive table that v7.49 already used. */
+.financial-periods-page .data-table{min-width:760px!important}
+.financial-periods-page .financial-archive-panel .data-table{min-width:720px!important}
+
+@media(max-width:760px){
+  .table-pagination{align-items:flex-start!important;flex-direction:column!important}
+  .pagination-controls{width:100%!important}
+  .pagination-pages{max-width:none!important;min-width:0!important;flex:1!important;width:auto!important}
+  .page-nav{padding:0 9px!important}
+}
+@media(max-width:620px){
+  .table-wrap,
+  .employee-table-panel .table-wrap,
+  .v752-transfer-page .table-wrap,
+  .v753-transfer-page .table-wrap,
+  .modal .table-wrap{
+    width:auto!important;
+    max-width:none!important;
+    margin:0 -11px!important;
+    border-radius:0!important;
+    border-left:0!important;
+    border-right:0!important;
+  }
+  .table-export-toolbar{padding:7px 0 9px!important}
+  .table-export-label{display:none!important}
+  .table-export-button{height:32px!important;padding:3px 7px!important}
+  .table-export-button .export-file-svg{width:21px!important;height:21px!important}
+  .financial-periods-page .data-table{min-width:720px!important}
+}
