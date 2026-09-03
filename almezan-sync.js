@@ -24,7 +24,7 @@
   function hashText(text){let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
   const stableJson=v=>JSON.stringify(v);
   function recordKey(dataset,row,index=0){if(row&&typeof row==='object'){if(row.id!=null&&String(row.id)!=='')return String(row.id);if(dataset==='stock'&&row.productId&&row.warehouseId)return `${row.productId}::${row.warehouseId}`;if(dataset==='itemPrices')return `${row.productId||''}::${row.unitId||''}::${row.priceGroupId||''}`;if(dataset==='exchangeRates')return `${row.currencyId||''}::${row.date||''}`;if(row.code!=null&&String(row.code)!=='')return `code:${row.code}`;if(row.number!=null&&String(row.number)!=='')return `number:${row.number}`}return `_h_${hashText(stableJson(row))}_${index}`}
-  function snapshotDb(db){const out={};for(const [dataset,value] of Object.entries(db||{})){if(Array.isArray(value)){const map={};value.forEach((row,i)=>{const key=recordKey(dataset,row,i),h=hashText(stableJson(row));map[key]=dataset==='stock'?{h,qty:Number(row?.qtyBase||0)}:h});out[dataset]={kind:'array',map}}else out[dataset]={kind:'value',map:{__value__:hashText(stableJson(value))}}}return out}
+  function snapshotDb(db){const out={};for(const [dataset,value] of Object.entries(db||{})){if(Array.isArray(value)){const map={};value.forEach((row,i)=>{const key=recordKey(dataset,row,i),h=hashText(stableJson(row));map[key]=(dataset==='stock'||dataset==='repStock')?{h,qty:Number(row?.qtyBase||0)}:h});out[dataset]={kind:'array',map}}else out[dataset]={kind:'value',map:{__value__:hashText(stableJson(value))}}}return out}
   const snapHash=v=>v&&typeof v==='object'?v.h:v;
   const snapQty=v=>v&&typeof v==='object'?Number(v.qty||0):0;
   function metaKey(t=tenant()){return META_PREFIX+encodeURIComponent(t||'none')}
@@ -39,7 +39,7 @@
   function revNow(){return Date.now()*1000+Math.floor(Math.random()*900)}
   function enqueue(dataset,key,deleted=false,rev=revNow(),extra={}){if(!tenant())return false;const p=readPending(),basePk=pkey(dataset,key),isStockDelta=extra.mode==='stockDelta',pk=isStockDelta?`${basePk}\u0001${rev}`:basePk,cur=p[pk];if(cur&&Number(cur.rev||0)>rev)return false;p[pk]={dataset,key,deleted:!!deleted,rev,deviceId:deviceId(),...extra};writePending(p);const m=readMeta();m.records[basePk]={...(m.records[basePk]||{}),rev,deleted:!!deleted};writeMeta(m);return true}
   function pendingRevForRecord(pending,dataset,key){let rev=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key))rev=Math.max(rev,Number(op.rev||0));return rev}
-  function pendingStockDelta(pending,key){let delta=0;for(const op of Object.values(pending||{}))if(op?.dataset==='stock'&&String(op?.key)===String(key)&&op?.mode==='stockDelta')delta+=Number(op.delta||0);return Number(delta.toFixed(8))}
+  function pendingQtyDelta(pending,dataset,key){let delta=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key)&&op?.mode==='stockDelta')delta+=Number(op.delta||0);return Number(delta.toFixed(8))}
   function pendingCount(){return Object.keys(readPending()).length}
   function emitStatus(extra={}){window.dispatchEvent(new CustomEvent('almezan:sync-status',{detail:{pending:pendingCount(),online:navigator.onLine!==false,busy,...extra}}))}
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -48,13 +48,34 @@
   function scheduleRetry(){if(!pendingCount()||navigator.onLine===false)return;clearTimeout(retryTimer);retryAttempt=Math.min(retryAttempt+1,6);const delay=Math.min(15000,1200*Math.pow(2,retryAttempt-1));emitStatus({state:'retrying',retryIn:delay});retryTimer=setTimeout(()=>{retryTimer=null;syncNow({manual:false,force:true,checkRemote:true}).catch(()=>{})},delay)}
   function getRecord(db,dataset,key){const value=db?.[dataset];if(Array.isArray(value)){for(let i=0;i<value.length;i++)if(recordKey(dataset,value[i],i)===key)return value[i];return undefined}return key==='__value__'?value:undefined}
   function applyRecord(db,dataset,key,value,deleted){if(key==='__value__'){if(deleted)delete db[dataset];else db[dataset]=clone(value);return}if(!Array.isArray(db[dataset]))db[dataset]=[];const arr=db[dataset],idx=arr.findIndex((row,i)=>recordKey(dataset,row,i)===key);if(deleted){if(idx>=0)arr.splice(idx,1)}else if(idx>=0)arr[idx]=clone(value);else arr.push(clone(value))}
-  function capture(db){if(suppress||!tenant())return 0;const next=snapshotDb(db);if(!snapshot){snapshot=next;mirrorDb(db).catch(()=>{});return 0}let changed=0;const datasets=new Set([...Object.keys(snapshot),...Object.keys(next)]);for(const dataset of datasets){const a=snapshot[dataset]?.map||{},b=next[dataset]?.map||{},keys=new Set([...Object.keys(a),...Object.keys(b)]);for(const key of keys){if(snapHash(a[key])===snapHash(b[key]))continue;if(dataset==='stock'){const delta=Number((snapQty(b[key])-snapQty(a[key])).toFixed(8));if(Math.abs(delta)>1e-10&&enqueue(dataset,key,false,revNow(),{mode:'stockDelta',delta}))changed++;continue}if(enqueue(dataset,key,b[key]===undefined))changed++}}snapshot=next;mirrorDb(db).catch(()=>{});if(changed)schedule(180);return changed}
+  function capture(db){if(suppress||!tenant())return 0;const next=snapshotDb(db);if(!snapshot){snapshot=next;mirrorDb(db).catch(()=>{});return 0}let changed=0;const datasets=new Set([...Object.keys(snapshot),...Object.keys(next)]);for(const dataset of datasets){const a=snapshot[dataset]?.map||{},b=next[dataset]?.map||{},keys=new Set([...Object.keys(a),...Object.keys(b)]);for(const key of keys){if(snapHash(a[key])===snapHash(b[key]))continue;if(dataset==='stock'||dataset==='repStock'){if(b[key]===undefined){if(enqueue(dataset,key,true))changed++;continue}const delta=Number((snapQty(b[key])-snapQty(a[key])).toFixed(8));if(Math.abs(delta)>1e-10&&enqueue(dataset,key,false,revNow(),{mode:'stockDelta',delta}))changed++;continue}if(enqueue(dataset,key,b[key]===undefined))changed++}}snapshot=next;mirrorDb(db).catch(()=>{});if(changed)schedule(180);return changed}
   function seedAll(db){const next=snapshotDb(db);snapshot=next;let n=0;for(const [dataset,entry] of Object.entries(next))for(const key of Object.keys(entry.map||{})){enqueue(dataset,key,false);n++}mirrorDb(db).catch(()=>{});if(n)schedule(150);return n}
   function openIdb(){return new Promise((resolve,reject)=>{if(!('indexedDB'in window))return resolve(null);const req=indexedDB.open(IDB_NAME,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'tenantId'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
   function compactMirrorDb(source,level=1){const x=clone(source||{}),limits=level>1?{audit:120,notifications:80,chatMessages:120,heldOrders:40}:{audit:500,notifications:200,chatMessages:300,heldOrders:100};for(const[k,max]of Object.entries(limits))if(Array.isArray(x[k])&&x[k].length>max)x[k]=x[k].slice(0,max);return x}
   async function putMirrorRecord(idb,record){return new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put(record);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('IndexedDB write failed'));tx.onabort=()=>reject(tx.error||new Error('IndexedDB write aborted'))})}
   async function mirrorDb(db,opts={}){const t=tenant();if(!t)return;const idb=await openIdb();if(!idb)return;const savedAt=Number(opts.savedAt)||Date.now();try{await putMirrorRecord(idb,{tenantId:t,db:clone(db),savedAt})}catch(_){try{await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,1),savedAt,compacted:true})}catch(__){await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,2),savedAt,compacted:true})}}finally{idb.close()}}
   async function readMirror(t=tenant()){if(!t)return null;const idb=await openIdb();if(!idb)return null;const result=await new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readonly'),req=tx.objectStore(IDB_STORE).get(t);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});idb.close();return result}
+  function representativeScopeId(){
+    const rt=runtime();if(rt?.type!=='representative')return '';
+    const direct=safe(rt?.account?.representativeId);if(direct)return direct;
+    const uid=safe(rt?.account?.id),d=window.AlMezan?.db;
+    return safe(d?.employees?.find?.(e=>String(e.id)===uid)?.representativeId||d?.representatives?.find?.(r=>String(r.employeeId)===uid)?.id);
+  }
+  function allowRemoteRecordForRole(dataset,key,value){
+    const repId=representativeScopeId();if(!repId)return true;
+    // المندوب لا يحتاج أرصدة مستودعات الشركة. مخزونه الوحيد هو repStock الخاص به.
+    if(dataset==='stock')return false;
+    if(dataset==='repStock'){
+      const row=value&&typeof value==='object'?value:null;
+      if(row?.repId)return String(row.repId)===String(repId);
+      return String(key||'').split('::')[0]===String(repId);
+    }
+    if(dataset==='repStockMoves'){
+      const row=value&&typeof value==='object'?value:null;
+      return !row?.repId||String(row.repId)===String(repId);
+    }
+    return true;
+  }
   function cloudPath(dataset,key){return `${basePath()}/${encodeURIComponent(dataset)}/${encodeURIComponent(key)}`}
   function parseCloudPath(path){const prefix=basePath()+'/';if(!String(path).startsWith(prefix))return null;const rel=String(path).slice(prefix.length),parts=rel.split('/');if(parts.length<2)return null;try{return{dataset:decodeURIComponent(parts[0]),key:decodeURIComponent(parts.slice(1).join('/'))}}catch(_){return null}}
   function rowsOf(direct,r){try{return direct.rows(r)||[]}catch(_){return[]}}
@@ -96,8 +117,8 @@
       for(const[,op]of batch){
         const current=getRecord(appDb,op.dataset,op.key),deleted=op.deleted||current===undefined,envelope={v:deleted?null:current,deleted,rev:op.rev,deviceId:op.deviceId||deviceId()};
         if(op.dataset==='sales'&&!deleted)maxSaleSeq=Math.max(maxSaleSeq,documentSequence(current?.number));
-        if(op.dataset==='stock'&&op.mode==='stockDelta'){
-          const base=current&&typeof current==='object'?{...current,qtyBase:Number(current.qtyBase||0)}:{productId:String(op.key).split('::')[0]||'',warehouseId:String(op.key).split('::')[1]||'',qtyBase:Number(op.delta||0)},dev=op.deviceId||deviceId(),devKey='d'+hashText(dev),clockPath=`$.stockClock.${devKey}`,rev=Number(op.rev),insertEnvelope={v:base,deleted:false,rev,deviceId:dev,stockClock:{[devKey]:rev}};
+        if((op.dataset==='stock'||op.dataset==='repStock')&&op.mode==='stockDelta'){
+          const parts=String(op.key).split('::'),fallback=op.dataset==='repStock'?{repId:parts[0]||'',productId:parts[1]||'',qtyBase:Number(op.delta||0)}:{productId:parts[0]||'',warehouseId:parts[1]||'',qtyBase:Number(op.delta||0)},base=current&&typeof current==='object'?{...current,qtyBase:Number(current.qtyBase||0)}:fallback,dev=op.deviceId||deviceId(),devKey='d'+hashText(dev),clockPath=`$.stockClock.${devKey}`,rev=Number(op.rev),insertEnvelope={v:base,deleted:false,rev,deviceId:dev,stockClock:{[devKey]:rev}};
           statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=json_set(CASE WHEN json_type(${s.table}.payload,'$.v')='object' THEN ${s.table}.payload ELSE excluded.payload END,'$.v.qtyBase',COALESCE(CAST(json_extract(${s.table}.payload,'$.v.qtyBase') AS REAL),0)+?,'$.rev',?,'$.deviceId',?,'${clockPath}',?),deleted=0,updated_at=?,sync_batch=(SELECT batch FROM ${s.metaTable} WHERE id=1) WHERE COALESCE(CAST(json_extract(${s.table}.payload,'${clockPath}') AS INTEGER),0)<?`,args:[cloudPath(op.dataset,op.key),JSON.stringify(insertEnvelope),0,rev,Number(op.delta||0),rev,dev,rev,rev,rev]});
           continue
         }
@@ -117,14 +138,16 @@
       const pk=pkey(parsed.dataset,parsed.key),rowBatch=Number(row.sync_batch||0),localBatch=Number(meta.records?.[pk]?.batch||0),localPending=pendingRevForRecord(pending,parsed.dataset,parsed.key);
       let envelope=row.payload;if(typeof envelope==='string'){try{envelope=JSON.parse(envelope)}catch(_){envelope=null}}
       const deleted=Number(row.deleted)===1||envelope?.deleted===true;let value=envelope&&Object.prototype.hasOwnProperty.call(envelope,'v')?envelope.v:envelope;
-      if(parsed.dataset!=='stock'&&localPending>0)continue;
-      if(parsed.dataset!=='stock'&&rowBatch>0&&localBatch>=rowBatch)continue;
-      if(parsed.dataset==='stock'&&!deleted&&value&&localPending>0){value=clone(value);value.qtyBase=Number((Number(value.qtyBase||0)+pendingStockDelta(pending,parsed.key)).toFixed(8))}
+      if(!allowRemoteRecordForRole(parsed.dataset,parsed.key,value))continue;
+      const qtyDataset=parsed.dataset==='stock'||parsed.dataset==='repStock';
+      if(!qtyDataset&&localPending>0)continue;
+      if(!qtyDataset&&rowBatch>0&&localBatch>=rowBatch)continue;
+      if(qtyDataset&&!deleted&&value&&localPending>0){value=clone(value);value.qtyBase=Number((Number(value.qtyBase||0)+pendingQtyDelta(pending,parsed.dataset,parsed.key)).toFixed(8))}
       const before=getRecord(current,parsed.dataset,parsed.key),beforeHash=before===undefined?'__missing__':hashText(stableJson(before)),afterHash=deleted?'__deleted__':hashText(stableJson(value));
-      if(parsed.dataset==='stock'&&rowBatch>0&&localBatch>=rowBatch&&beforeHash===afterHash)continue;
+      if(qtyDataset&&rowBatch>0&&localBatch>=rowBatch&&beforeHash===afterHash)continue;
       applyRecord(current,parsed.dataset,parsed.key,value,deleted);
       meta.records[pk]={rev:Number(row.updated_at||envelope?.rev||0),batch:rowBatch,deleted,hash:deleted?'':hashText(stableJson(value))};
-      if(parsed.dataset!=='stock'&&pending[pk]&&localPending<=Number(row.updated_at||0))delete pending[pk];
+      if(!qtyDataset&&pending[pk]&&localPending<=Number(row.updated_at||0))delete pending[pk];
       changedDatasets.add(parsed.dataset);(changedRecords[parsed.dataset]||(changedRecords[parsed.dataset]=[])).push(parsed.key);applied++
     }
     meta.protocol=4;meta.remoteBatch=Math.max(Number(meta.remoteBatch||0),Number(remoteBatch||0));meta.batchInitialized=true;meta.lastPullAt=Date.now();meta.lastSuccessAt=Date.now();writeMeta(meta);writePending(pending);

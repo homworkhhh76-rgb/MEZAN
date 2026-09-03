@@ -86,7 +86,10 @@
     const payloadSalt=raw.slice(o,o+16);o+=16;const payloadIv=raw.slice(o,o+12);o+=12;const cipher=raw.slice(o);try{const key=await derive(activationKey,payloadSalt),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:payloadIv},key,cipher),payload=JSON.parse(dec.decode(plain));if(payload?.app!==APP_TAG||safe(payload.activationKey)!==safe(activationKey))throw new Error();return payload}catch(_){throw new Error('فشل فك ملف التفعيل أو تم العبث به.');}
   }
   async function makeFile(payload){const value={...clone(payload),fileId:payload.fileId||(crypto.randomUUID?crypto.randomUUID():`${Date.now()}_${Math.random()}`),app:APP_TAG};return{value,opaque:await packOpaque(value)}}
-  async function downloadActivationFile(payload,fileName){const made=await makeFile(payload),name=(fileName||`${payload.companyName||'AlMeezan'}-login.mzauth`).replace(/[\\/:*?"<>|]+/g,'_').replace(/\.(?:mzauth|ctauth)$/i,'')+'.mzauth',blob=new Blob([made.opaque],{type:'application/octet-stream'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1200);return made}
+  function activationFileName(payload,fileName){return (fileName||`${payload.companyName||'AlMeezan'}-login.mzauth`).replace(/[\\/:*?"<>|]+/g,'_').replace(/\.(?:mzauth|ctauth)$/i,'')+'.mzauth'}
+  async function prepareActivationDownload(payload,fileName){const made=await makeFile(payload),name=activationFileName(payload,fileName),blob=new Blob([made.opaque],{type:'application/octet-stream'}),url=URL.createObjectURL(blob);return{payload:made.value,made,name,url,createdAt:Date.now()}}
+  function triggerPreparedActivationDownload(prepared){if(!prepared?.url)throw new Error('ملف الدخول غير جاهز للتنزيل.');const a=document.createElement('a');a.href=prepared.url;a.download=prepared.name||'AlMeezan-login.mzauth';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>{try{URL.revokeObjectURL(prepared.url)}catch(_){ }prepared.url=''},60000);return prepared.made}
+  async function downloadActivationFile(payload,fileName){const prepared=await prepareActivationDownload(payload,fileName);triggerPreparedActivationDownload(prepared);return prepared.made}
   async function parseActivationFile(file){if(!file)throw new Error('اختر ملف التفعيل أولاً.');if(!/\.mzauth$/i.test(file.name||''))throw new Error('امتداد الملف غير معتمد. استخدم ملف .mzauth');const text=(await file.text()).trim();if(!text)throw new Error('ملف التفعيل فارغ.');const p=await unpackOpaque(text);if(p.expiresAt&&Date.now()>=new Date(p.expiresAt).getTime())throw new Error('انتهت صلاحية ملف التفعيل.');return p}
 
   const scopedDbKey=id=>`${LOCAL_DB_ACCESS_KEY}::${encodeURIComponent(safe(id)||'current')}`;
@@ -118,16 +121,26 @@
   }
   async function verifyPayloadRemote(payload){
     const db=payload.database||readDatabaseAccess(payload.companyId)||{},companyId=String(payload.companyId||payload.tenantId||'');if(!companyId||!db.databaseURL||!db.authToken)throw new Error('ملف التفعيل لا يحتوي على قاعدة شركة صالحة.');
-    const base=`almezan/companies/${encodeURIComponent(companyId)}`,access=unwrapRecord(await readExact(db,`${base}/access/company`,{ensureSchema:true}));
+    const base=`almezan/companies/${encodeURIComponent(companyId)}`,accessPath=`${base}/access/company`;let access=unwrapRecord(await readExact(db,accessPath,{ensureSchema:true}));
     if(!access)throw new Error('مفتاح الشركة غير مسجل في قاعدة الشركة.');if(String(access.companyKey||'').toUpperCase()!==String(payload.companyKey||payload.activationKey||'').toUpperCase())throw new Error('ملف التفعيل لا يطابق مفتاح الشركة.');if(access.status!=='active')throw new Error('تم إيقاف مفتاح الشركة من الإدارة العامة.');if(access.endAt&&Date.now()>=new Date(access.endAt).getTime())throw new Error('انتهت مدة تفعيل الشركة.');
     const account=payload.account||{};
     if(payload.type==='company-manager'){
-      const row=access.manager;if(!row||row.active===false)throw new Error('حساب مدير الشركة غير متاح.');if(String(row.id||'')!==String(account.id||''))throw new Error('ملف المدير لا يطابق الحساب المسجل.');if(String(row.authVersion||'')!==String(account.authVersion||''))throw new Error('تم إصدار ملف مدير أحدث. استخدم الملف الجديد.');
+      let row=access.manager;if(!row||row.active===false)throw new Error('حساب مدير الشركة غير متاح.');if(String(row.id||'')!==String(account.id||''))throw new Error('ملف المدير لا يطابق الحساب المسجل.');
+      const fileVersion=String(account.authVersion||''),currentVersion=String(row.authVersion||''),previousVersion=String(row.previousAuthVersion||''),pendingVersion=String(row.pendingAuthVersion||''),policyVersion=Number(row.authPolicyVersion||0);
+      if(fileVersion===currentVersion){
+        if(pendingVersion&&pendingVersion===currentVersion){const committed={...row,previousAuthVersion:'',pendingAuthVersion:'',pendingIssuedAt:'',authPolicyVersion:2,activatedAt:new Date().toISOString(),updatedAt:new Date().toISOString()},updatedAt=Date.now(),nextAccess={...access,manager:committed,updatedAt};await writeExact(db,accessPath,nextAccess,updatedAt,false);access=nextAccess;row=committed}
+      }else if(previousVersion&&fileVersion===previousVersion&&pendingVersion){
+        // الملف السابق يظل صالحاً مؤقتاً إلى أن يتم استعمال الملف الجديد لأول مرة بنجاح.
+      }else if(policyVersion<2){
+        // إصلاح الإصدارات القديمة التي ألغت الملف قبل التأكد من تنزيل البديل.
+        const recovered={...row,...account,id:row.id||account.id,active:true,authVersion:fileVersion,previousAuthVersion:'',pendingAuthVersion:'',pendingIssuedAt:'',authPolicyVersion:2,recoveredAt:new Date().toISOString(),updatedAt:new Date().toISOString()},updatedAt=Date.now(),nextAccess={...access,manager:recovered,updatedAt};await writeExact(db,accessPath,nextAccess,updatedAt,false);access=nextAccess;row=recovered;
+      }else throw new Error('تم إصدار ملف مدير أحدث. استخدم الملف الجديد.');
     }else{
       const row=unwrapRecord(await readExact(db,accountPath(payload)));if(!row)throw new Error('الحساب غير موجود في قاعدة الشركة أو لم تتم مزامنته بعد.');if(row.active===false)throw new Error('تم إيقاف هذا الحساب.');if(String(row.authVersion||'')!==String(account.authVersion||''))throw new Error('تم إصدار ملف دخول أحدث لهذا الحساب.');if(payload.type==='representative'&&String(row.role||'')!=='مندوب')throw new Error('الحساب لم يعد مندوباً.');if(payload.type==='branch-manager'&&String(row.role||'')!=='مدير فرع')throw new Error('حساب مدير الفرع غير متاح.');
     }
     markVerified(payload,access);return {access,online:true};
   }
+
   function isLogicalVerificationError(error){
     const msg=String(error?.message||error||'');
     return /مفتاح الشركة غير مسجل|لا يطابق|تم إيقاف|انتهت مدة|غير متاح|تم إصدار ملف|الحساب غير موجود|تم إيقاف هذا الحساب|لم يعد مندوباً|مدير الفرع غير متاح/.test(msg);
@@ -147,18 +160,22 @@
   function buildRolePayload(type,account,extra={}){const rt=readRuntime()||{};return{type,activationKey:rt.companyKey||rt.activationKey,fileId:`${type}_${account?.id||Date.now()}_${account?.authVersion||''}`,companyId:rt.companyId,tenantId:rt.companyId,companyKey:rt.companyKey||rt.activationKey,companyName:rt.companyName||'الشركة',status:rt.status||'active',plan:rt.plan||'lifetime',expiresAt:rt.expiresAt||'',rootPath:rt.rootPath||'almezan/companies',database:readDatabaseAccess(rt.companyId)||rt.database||{},permissions:account?.permissions||[],account:clone(account),...extra}}
   async function prepareVerifiedRoleFile(type,account,fileName){const payload=buildRolePayload(type,account);if(window.AlMezanSync){const result=await window.AlMezanSync.syncNow({manual:false,force:true});if(result?.remaining>0||result?.error)throw new Error('الحساب محفوظ محلياً لكن لم يصل إلى قاعدة الشركة بعد. شغّل المزامنة ثم أعد المحاولة.')}await verifyPayloadRemote(payload);return downloadActivationFile(payload,fileName)}
 
-  async function rotateCompanyManagerFile(fileName=''){
-    const rt=readRuntime();if(!rt||rt.type!=='company-manager')throw new Error('هذه العملية متاحة لمدير الشركة فقط.');if(navigator.onLine===false)throw new Error('يجب الاتصال بالإنترنت لتغيير ملف المدير وتعطيل الملف القديم.');
+  async function prepareCompanyManagerFileRotation(fileName=''){
+    const rt=readRuntime();if(!rt||rt.type!=='company-manager')throw new Error('هذه العملية متاحة لمدير الشركة فقط.');if(navigator.onLine===false)throw new Error('يجب الاتصال بالإنترنت لتغيير ملف المدير.');
     const db=readDatabaseAccess(rt.companyId)||rt.database||{},companyId=String(rt.companyId||rt.tenantId||'');if(!companyId||!db.databaseURL||!db.authToken)throw new Error('بيانات قاعدة الشركة غير متاحة.');
     const path=`almezan/companies/${encodeURIComponent(companyId)}/access/company`,access=unwrapRecord(await readExact(db,path,{ensureSchema:true}));if(!access)throw new Error('بيانات تفعيل الشركة غير موجودة.');
-    const current=rt.account||{},remote=access.manager||{};if(String(remote.id||'')!==String(current.id||''))throw new Error('حساب المدير الحالي لا يطابق المدير المسجل.');if(String(remote.authVersion||'')!==String(current.authVersion||''))throw new Error('تم إصدار ملف مدير أحدث بالفعل. ادخل بالملف الجديد أولاً.');
-    const authVersion='AUTH-'+(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`),manager={...remote,...current,id:remote.id||current.id,active:true,authVersion,updatedAt:new Date().toISOString()},updatedAt=Date.now(),nextAccess={...access,manager,updatedAt};
-    await writeExact(db,path,nextAccess,updatedAt,false);
+    const current=rt.account||{},remote=access.manager||{};if(String(remote.id||'')!==String(current.id||''))throw new Error('حساب المدير الحالي لا يطابق المدير المسجل.');
+    const currentVersion=String(current.authVersion||''),remoteVersion=String(remote.authVersion||''),previousVersion=String(remote.previousAuthVersion||''),policyVersion=Number(remote.authPolicyVersion||0);
+    if(policyVersion>=2&&currentVersion!==remoteVersion&&currentVersion!==previousVersion)throw new Error('هذا الملف لم يعد مخولاً بتغيير ملف المدير. ادخل بأحدث ملف مدير أولاً.');
+    const authVersion='AUTH-'+(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`),issuedAt=new Date().toISOString();
+    const manager={...remote,...current,id:remote.id||current.id,active:true,authVersion,previousAuthVersion:currentVersion,pendingAuthVersion:authVersion,pendingIssuedAt:issuedAt,authPolicyVersion:2,updatedAt:issuedAt},updatedAt=Date.now(),nextAccess={...access,manager,updatedAt};
     const account={...manager,branchId:current.branchId||'BR-MAIN',permissions:Array.isArray(current.permissions)?current.permissions:[]},payload={type:'company-manager',activationKey:rt.companyKey||rt.activationKey,fileId:`manager_${account.id}_${authVersion}`,companyId,tenantId:companyId,companyKey:rt.companyKey||rt.activationKey,companyName:rt.companyName||access.companyName||'الشركة',status:access.status||rt.status||'active',plan:access.plan||rt.plan||'lifetime',expiresAt:access.endAt||rt.expiresAt||'',rootPath:rt.rootPath||'almezan/companies',database:db,account,permissions:account.permissions,app:APP_TAG};
-    activatePayload(payload);try{markVerified(payload,nextAccess)}catch(_){}
-    try{const app=window.AlMezan,user=app?.db?.employees?.find(e=>String(e.id)===String(account.id));if(user){Object.assign(user,account);app.saveDB?.(true)}}catch(_){}
-    return downloadActivationFile(payload,fileName||`${rt.companyName||access.companyName||'الشركة'}-مدير-جديد.mzauth`);
+    const prepared=await prepareActivationDownload(payload,fileName||`${rt.companyName||access.companyName||'الشركة'}-مدير-جديد.mzauth`);
+    await writeExact(db,path,nextAccess,updatedAt,false);
+    return{...prepared,authVersion,previousAuthVersion:currentVersion,companyId};
   }
+  async function rotateCompanyManagerFile(fileName=''){const prepared=await prepareCompanyManagerFileRotation(fileName);triggerPreparedActivationDownload(prepared);return prepared}
 
-  window.AlMezanActivation={version:1,makeFile,downloadActivationFile,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,verifyCompanyAccessRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,rotateCompanyManagerFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
+
+  window.AlMezanActivation={version:2,makeFile,prepareActivationDownload,triggerPreparedActivationDownload,downloadActivationFile,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,verifyCompanyAccessRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,prepareCompanyManagerFileRotation,rotateCompanyManagerFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
 })();
