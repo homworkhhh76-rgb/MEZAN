@@ -2,7 +2,7 @@
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
   const BACKUP_REMINDER_PREFIX='almezan_backup_reminder_v1::',BACKUP_REMINDER_MS=60*60*1000,KEY_MONITOR_MS=60*1000;
-  const APP_BUILD='7.64',APP_BUILD_TOKEN='764',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.67',APP_BUILD_TOKEN='767',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const PAGE_FILES={dashboard:'dashboard.html',cashier:'cashier.html',sales:'sales.html',purchases:'purchases.html',debts:'debts.html',installments:'installments.html',products:'products.html',stock:'stock.html',units:'units.html',transfers:'transfers.html',barcodes:'barcodes.html',accounts:'accounts.html',vouchers:'vouchers.html',cheques:'cheques.html',journals:'journals.html',expenses:'expenses.html',reports:'reports.html',customers:'customers.html','customer-groups':'customer-groups.html','price-groups':'price-groups.html',suppliers:'suppliers.html',representatives:'representatives.html',messaging:'messaging.html',branches:'branches.html',warehouses:'warehouses.html',employees:'employees.html',audit:'audit.html',settings:'settings.html'};
   const PAGE_BY_FILE=Object.fromEntries(Object.entries(PAGE_FILES).map(([view,file])=>[file,view]));
   function entryPageView(){const explicit=String(window.ALMEZAN_PAGE_VIEW||'').trim();if(explicit&&PAGE_FILES[explicit])return explicit;const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();return PAGE_BY_FILE[file]||'dashboard'}
@@ -14,8 +14,9 @@
   const scopedKey=(base,id=tenantId())=>id?`${base}::${encodeURIComponent(id)}`:base;
   const dbKey=()=>scopedKey(DB_BASE_KEY),cartKey=()=>scopedKey(CART_BASE_KEY),branchKey=()=>scopedKey(BRANCH_BASE_KEY),dbSavedKey=()=>DB_SAVED_PREFIX+encodeURIComponent(tenantId()||'default');
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  const latinDigits=v=>String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  const num=v=>Number(v)||0;
+  const num=v=>{const raw=latinDigits(v).replace(/٫/g,'.').replace(/[٬،,\s]/g,'');const n=Number(raw);return Number.isFinite(n)?n:0};
   const clone=v=>JSON.parse(JSON.stringify(v));
   let db=null;
   const systemToday=()=>new Date().toISOString().slice(0,10);
@@ -241,8 +242,8 @@
     return max
   }
   function nextNo(type,prefix){const next=maxDocumentSequence(type,prefix)+1;db.sequences[type]=Math.max(Number(db.sequences[type]||0),next);return `${prefix||''}${String(next).padStart(6,'0')}`}
-  function money(v){const cur=db.company.currency||'₪';return `${new Intl.NumberFormat('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}).format(num(v))} ${esc(cur)}`}
-  function dateFmt(v,withTime=false){if(!v)return '—';try{return new Intl.DateTimeFormat('ar-EG',withTime?{dateStyle:'medium',timeStyle:'short'}:{dateStyle:'medium'}).format(new Date(v))}catch(e){return esc(v)}}
+  function money(v){const cur=db.company.currency||'₪';return `${new Intl.NumberFormat('ar-EG-u-nu-latn',{minimumFractionDigits:2,maximumFractionDigits:2}).format(num(v))} ${esc(cur)}`}
+  function dateFmt(v,withTime=false){if(!v)return '—';try{return new Intl.DateTimeFormat('ar-EG-u-nu-latn',withTime?{dateStyle:'medium',timeStyle:'short'}:{dateStyle:'medium'}).format(new Date(v))}catch(e){return esc(v)}}
   function branchName(id){return db.branches.find(x=>x.id===id)?.name||'—'}
   function warehouseName(id){return db.warehouses.find(x=>x.id===id)?.name||'—'}
   function stockQty(productId,warehouseId){return Number(db.stock.filter(s=>s.productId===productId&&s.warehouseId===warehouseId).reduce((a,s)=>a+num(s.qtyBase),0).toFixed(8))}
@@ -400,7 +401,16 @@ function table(headers,rows,emptyHtml=''){
   const tools=`<div class="table-export-toolbar" aria-label="تصدير السجل الكامل"><span class="table-export-label">تحميل السجل كامل</span><button type="button" class="table-export-button table-export-pdf" data-action="export-table-pdf" title="حفظ السجل كامل PDF">${tableExportSvg('pdf')}<span>PDF</span></button><button type="button" class="table-export-button table-export-excel" data-action="export-table-excel" title="تحميل السجل كامل Excel">${tableExportSvg('excel')}<span>Excel</span></button></div>`;
   return `<div class="data-table-block" id="${tableId}" data-virtual-table-id="${tableId}">${tools}<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>${virtualPagerHtml(tableId,rows.length,pageSize,1)}</div>`
 }
+  function normalizeLatinNumerals(root=document){
+    if(!root)return;
+    try{
+      const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;
+      while((n=walker.nextNode())){const p=n.parentElement;if(!p||/^(SCRIPT|STYLE|NOSCRIPT)$/i.test(p.tagName))continue;if(/[٠-٩۰-۹]/.test(n.nodeValue||''))n.nodeValue=latinDigits(n.nodeValue)}
+      $$('input,textarea',root).forEach(el=>{const t=String(el.type||'').toLowerCase(),mode=String(el.inputMode||'').toLowerCase();if(['number','date','time','datetime-local','month','week','tel'].includes(t)||['numeric','decimal','tel'].includes(mode)){el.lang='en-US';const v=String(el.value||'');if(/[٠-٩۰-۹]/.test(v)){const clean=latinDigits(v).replace(/٫/g,'.').replace(/٬/g,'');try{el.value=clean}catch(_){}}}});
+    }catch(_){}
+  }
   function blankZeroNumbers(root=document){
+    normalizeLatinNumerals(root);
     $$('input[type=number]',root).forEach(input=>{
       if(input.dataset.keepZero==='1')return;
       if(!input.placeholder)input.placeholder=(String(input.step||'').includes('.')?'0.00':'0');
@@ -414,11 +424,11 @@ function table(headers,rows,emptyHtml=''){
     })
   }
   function badge(text,color=''){return `<span class="badge ${color}">${esc(text)}</span>`}
-  function toast(message,type='success',duration=3200){const root=$('#toastRoot');if(!root)return;const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`${I(type==='error'?'alert':type==='warning'?'alert':'check',18)}<span>${esc(message)}</span>`;root.appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(-10px)';setTimeout(()=>el.remove(),200)},duration)}
+  function toast(message,type='success',duration=3200){const root=$('#toastRoot');if(!root)return;const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`${I(type==='error'?'alert':type==='warning'?'alert':'check',18)}<span>${esc(latinDigits(message))}</span>`;root.appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(-10px)';setTimeout(()=>el.remove(),200)},duration)}
   function closeModal(){if(state.activeStream){state.activeStream.getTracks().forEach(t=>t.stop());state.activeStream=null}$('#modalRoot').innerHTML='';state.confirmCallback=null}
   function openModal({title,body,size='',submitText='حفظ',submitIcon='save',submitClass='btn-primary',cancelText='إلغاء',hideSubmit=false,onSubmit,afterOpen}){
     const root=$('#modalRoot'),formId='modalForm';root.innerHTML=`<section class="modal ${size}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-head"><h3>${esc(title)}</h3><button type="button" class="icon-button" data-action="close-modal">${I('close')}</button></div><form id="${formId}"><div class="modal-body">${body}</div><div class="modal-foot">${hideSubmit?'':`<button class="btn ${submitClass}" type="submit">${I(submitIcon)}${esc(submitText)}</button>`}<button class="btn btn-ghost" type="button" data-action="close-modal">${esc(cancelText)}</button></div></form></section>`;
-    const form=$('#'+formId);if(onSubmit)form.addEventListener('submit',async e=>{e.preventDefault();const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;try{const result=await onSubmit(new FormData(form),form);if(result!==false)closeModal()}catch(err){toast(err.message||'تعذر إكمال العملية','error');if(btn)btn.disabled=false}});root.onclick=e=>{if(e.target===root)closeModal()};injectIcons(root);enhanceSelects(root);blankZeroNumbers(root);setTimeout(()=>{const first=$('input:not([type=hidden]),select,textarea',form);first?.focus();afterOpen?.(form);blankZeroNumbers(root)},30)
+    const form=$('#'+formId);if(onSubmit)form.addEventListener('submit',async e=>{e.preventDefault();const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;try{const result=await onSubmit(new FormData(form),form);if(result!==false)closeModal()}catch(err){toast(err.message||'تعذر إكمال العملية','error');if(btn)btn.disabled=false}});root.onclick=e=>{if(e.target===root)closeModal()};injectIcons(root);enhanceSelects(root);blankZeroNumbers(root);setTimeout(()=>{const first=$('input:not([type=hidden]),select,textarea',form);first?.focus();afterOpen?.(form);blankZeroNumbers(root);normalizeLatinNumerals(root)},30)
   }
   function confirmDialog(title,message,onConfirm,danger=true){state.confirmCallback=onConfirm;openModal({title,body:`<div class="alert-item"><span>${I('alert')}</span><div><strong>${esc(title)}</strong><small>${esc(message)}</small></div></div>`,submitText:danger?'تأكيد الحذف':'تأكيد',submitIcon:danger?'trash':'check',submitClass:danger?'btn-danger':'btn-primary',onSubmit:()=>{onConfirm();return true}})}
   function downloadBlob(name,content,type='text/plain;charset=utf-8'){const blob=content instanceof Blob?content:new Blob(['\ufeff',content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
@@ -473,7 +483,7 @@ async function exportTablePDF(btn){
     if(!w)throw Error('اسمح بفتح النوافذ لتنزيل PDF.');
     const rows=r.rows.map(row=>`<tr>${row.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('');
     w.document.open();
-    w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(r.title)}</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;color:#172033;margin:0}.brand{text-align:center;border-bottom:2px solid #1f4b7a;padding-bottom:12px;margin-bottom:14px}.brand img{width:72px;height:72px;object-fit:contain}.brand h1{margin:5px 0 2px;font-size:20px}.brand p{margin:2px;color:#64748b;font-size:11px}.report-title{display:flex;justify-content:space-between;align-items:center;margin:10px 0}.report-title h2{font-size:17px;margin:0}.report-title span{font-size:10px;color:#64748b}table{border-collapse:collapse;width:100%;font-size:10px;table-layout:auto}th,td{border:1px solid #cbd5e1;padding:6px;text-align:right;vertical-align:top;word-break:break-word}th{background:#eef3f8;font-weight:700}tbody tr:nth-child(even){background:#f8fafc}.footer{margin-top:12px;font-size:9px;color:#64748b;text-align:center}</style></head><body><header class="brand">${logo?`<img src="${logo}" alt="">`:''}<h1>${esc(r.company.name)}</h1>${r.company.legalName?`<p>${esc(r.company.legalName)}</p>`:''}<p>${esc(r.company.phone)} ${r.company.address?' — '+esc(r.company.address):''}${r.company.taxNumber?' — الرقم الضريبي: '+esc(r.company.taxNumber):''}</p></header><div class="report-title"><h2>${esc(r.title)}</h2><span>${r.rows.length} سجل — ${new Date(r.createdAt).toLocaleString('ar-EG')}</span></div><table><thead><tr>${r.headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="footer">${esc(r.company.name)} — نظام الميزان برو</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+    w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(r.title)}</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;color:#172033;margin:0}.brand{text-align:center;border-bottom:2px solid #1f4b7a;padding-bottom:12px;margin-bottom:14px}.brand img{width:72px;height:72px;object-fit:contain}.brand h1{margin:5px 0 2px;font-size:20px}.brand p{margin:2px;color:#64748b;font-size:11px}.report-title{display:flex;justify-content:space-between;align-items:center;margin:10px 0}.report-title h2{font-size:17px;margin:0}.report-title span{font-size:10px;color:#64748b}table{border-collapse:collapse;width:100%;font-size:10px;table-layout:auto}th,td{border:1px solid #cbd5e1;padding:6px;text-align:right;vertical-align:top;word-break:break-word}th{background:#eef3f8;font-weight:700}tbody tr:nth-child(even){background:#f8fafc}.footer{margin-top:12px;font-size:9px;color:#64748b;text-align:center}</style></head><body><header class="brand">${logo?`<img src="${logo}" alt="">`:''}<h1>${esc(r.company.name)}</h1>${r.company.legalName?`<p>${esc(r.company.legalName)}</p>`:''}<p>${esc(r.company.phone)} ${r.company.address?' — '+esc(r.company.address):''}${r.company.taxNumber?' — الرقم الضريبي: '+esc(r.company.taxNumber):''}</p></header><div class="report-title"><h2>${esc(r.title)}</h2><span>${r.rows.length} سجل — ${new Date(r.createdAt).toLocaleString('ar-EG-u-nu-latn')}</span></div><table><thead><tr>${r.headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="footer">${esc(r.company.name)} — نظام الميزان برو</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
     w.document.close();
   }catch(e){toast(e.message||'تعذر تجهيز PDF','error')}
 }
@@ -485,7 +495,7 @@ function enhanceSelects(root=document){
   $$('select:not([multiple])',root).forEach(select=>{
     if(select.dataset.customSelect==='1')return;
     select.dataset.customSelect='1';
-    const shell=document.createElement('div');shell.className='custom-select'+(select.classList.contains('filter-select')?' filter-select-shell':'');
+    const shell=document.createElement('div');shell.className='custom-select'+(select.classList.contains('filter-select')?' filter-select-shell':'')+(select.classList.contains('mobile-full-select')?' mobile-full-select-shell':'');
     select.parentNode.insertBefore(shell,select);shell.appendChild(select);select.classList.add('native-select-hidden');
     const trigger=document.createElement('button');trigger.type='button';trigger.className='custom-select-trigger';trigger.disabled=!!select.disabled;trigger.innerHTML=`<span class="custom-select-value"></span>${I('chevron',16)}`;
     const menu=document.createElement('div');menu.className='custom-select-menu';menu.hidden=true;shell.append(trigger,menu);
@@ -495,7 +505,7 @@ function enhanceSelects(root=document){
       valueEl.textContent=opts[select.selectedIndex]?.textContent||'اختر';
       const search=`<div class="custom-select-search">${I('search',14)}<input type="search" inputmode="search" autocomplete="off" enterkeyhint="search" placeholder="بحث..." value="${esc(currentFilter)}" aria-label="بحث في القائمة"></div>`;
       const buttons=opts.map((o,i)=>({o,i})).filter(({o})=>!q||o.textContent.toLowerCase().includes(q)).map(({o,i})=>`<button type="button" class="custom-select-option ${i===select.selectedIndex?'selected':''}" data-index="${i}" ${o.disabled?'disabled':''}>${esc(o.textContent)}</button>`).join('')||'<div class="custom-select-empty">لا توجد نتائج</div>';
-      menu.innerHTML=search+buttons;
+      menu.innerHTML=search+buttons;normalizeLatinNumerals(menu);
       const si=$('input[type=search]',menu);
       if(si){
         si.addEventListener('pointerdown',e=>e.stopPropagation());
@@ -503,7 +513,17 @@ function enhanceSelects(root=document){
         si.addEventListener('input',e=>{const pos=e.target.selectionStart||0;rebuild(e.target.value);const next=$('input[type=search]',menu);if(next){next.focus({preventScroll:true});try{next.setSelectionRange(pos,pos)}catch(_){}}})
       }
     };
-    const positionMenu=()=>{const r=trigger.getBoundingClientRect(),vv=window.visualViewport,topOffset=vv?.offsetTop||0,viewportHeight=vv?.height||window.innerHeight;menu.style.left=`${Math.max(8,r.left)}px`;menu.style.width=`${Math.max(r.width,190)}px`;menu.style.top=`${Math.min(topOffset+viewportHeight-12,r.bottom+6)}px`;requestAnimationFrame(()=>{const mr=menu.getBoundingClientRect(),bottomLimit=topOffset+viewportHeight-10;if(mr.bottom>bottomLimit&&r.top-topOffset>Math.min(mr.height,viewportHeight*.55)+12)menu.style.top=`${Math.max(topOffset+8,r.top-Math.min(mr.height,viewportHeight*.55)-6)}px`})};
+    const positionMenu=()=>{
+      const r=trigger.getBoundingClientRect(),vv=window.visualViewport,offsetLeft=vv?.offsetLeft||0,topOffset=vv?.offsetTop||0,viewportWidth=vv?.width||window.innerWidth,viewportHeight=vv?.height||window.innerHeight;
+      const side=window.innerWidth<=620?10:8,leftLimit=offsetLeft+side,rightLimit=offsetLeft+viewportWidth-side,fullMobile=shell.classList.contains('mobile-full-select-shell')&&window.innerWidth<=760;
+      const desired=fullMobile?(rightLimit-leftLimit):Math.max(r.width,190),width=Math.max(150,Math.min(desired,rightLimit-leftLimit));
+      let left=fullMobile?leftLimit:Math.max(leftLimit,Math.min(r.left,rightLimit-width));
+      menu.style.right='auto';menu.style.left=`${left}px`;menu.style.width=`${width}px`;menu.style.maxWidth=`${Math.max(150,rightLimit-leftLimit)}px`;
+      const bottomLimit=topOffset+viewportHeight-side,below=Math.max(0,bottomLimit-(r.bottom+6)),above=Math.max(0,r.top-(topOffset+side)),maxH=Math.max(120,Math.min(320,Math.max(below,above)));
+      menu.style.maxHeight=`${maxH}px`;
+      if(below>=Math.min(180,maxH)||below>=above)menu.style.top=`${Math.max(topOffset+side,Math.min(bottomLimit-maxH,r.bottom+6))}px`;else menu.style.top=`${Math.max(topOffset+side,r.top-maxH-6)}px`;
+      requestAnimationFrame(()=>{const mr=menu.getBoundingClientRect();let x=mr.left;if(mr.right>rightLimit)x-=mr.right-rightLimit;if(x<leftLimit)x=leftLimit;menu.style.left=`${x}px`;const now=menu.getBoundingClientRect();if(now.bottom>bottomLimit)menu.style.top=`${Math.max(topOffset+side,bottomLimit-now.height)}px`})
+    };
     trigger.addEventListener('click',e=>{e.stopPropagation();const willOpen=!shell.classList.contains('open');closeCustomSelects(shell);shell.classList.toggle('open',willOpen);menu.hidden=!willOpen;if(willOpen){currentFilter='';rebuild();positionMenu()}});
     menu.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('.custom-select-option');if(!b||b.disabled)return;select.selectedIndex=Number(b.dataset.index);currentFilter='';rebuild();closeCustomSelects();select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))});
     select.addEventListener('change',()=>rebuild(''));

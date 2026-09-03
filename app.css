@@ -1767,3 +1767,18 @@ body.printing .print-view{background:#fff;}
 .manager-auth-head h3{margin:0 0 4px}.manager-auth-head p{margin:0;color:var(--muted);font-size:12px;line-height:1.7}
 .manager-auth-setting>.btn{width:100%;justify-content:center;margin-bottom:8px}
 @media(max-width:640px){.unit-stock-stack{min-width:48px}.unit-stock-line b{font-size:11px}.unit-stock-line small{font-size:9px}.product-stock{max-width:52%}}
+
+/* v7.66 mobile modal/select containment + Latin-number fields */
+.modal-body{overflow-x:hidden}
+.custom-select,.custom-select-trigger,.custom-select-value{min-width:0}
+.custom-select-menu{box-sizing:border-box;max-width:calc(100vw - 16px)}
+input[type=number],input[type=date],input[type=time],input[type=datetime-local],input[type=month],input[type=week],input[inputmode=numeric],input[inputmode=decimal],input[inputmode=tel]{font-variant-numeric:tabular-nums}
+@media(max-width:760px){.modal .mobile-full-select-shell .custom-select-menu{max-width:calc(100vw - 20px)!important}.modal-body .form-section,.modal-body .form-grid,.modal-body .field{min-width:0}}
+
+
+/* v7.67 readability: heavier Cairo without changing any font sizes. */
+body,button,input,select,textarea,.nav-item,.data-table,.panel,.summary-row,.custom-select-trigger,.custom-select-option,.field>span:first-child,small,.muted{font-weight:600!important}
+strong,b,h1,h2,h3,h4,h5,h6,.btn,.metric-card strong,.total-row.grand{font-weight:700!important}
+.payment-split-section .partial-debt-note{display:flex;align-items:center;gap:8px;margin-top:10px;padding:9px 11px;border:1px solid #d7a548;border-radius:8px;background:#fff8e8;color:#6f4b10;font-weight:600}
+.payment-split-section .partial-debt-note svg{flex:0 0 auto}
+.payment-split-total .text-red,#paymentSplitTotal.text-red{color:var(--red)!important}

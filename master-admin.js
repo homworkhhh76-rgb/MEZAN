@@ -9,7 +9,7 @@ function master(){const m=A().readMasterConfig();if(!m?.database?.databaseURL||!
 function root(){return master().adminRootPath||'almezan/admin'}
 function masterDb(){return master().database}
 function modal(id,show=true){$(id).classList.toggle('show',show)}
-function fmt(v){if(!v)return'—';try{return new Intl.DateTimeFormat('ar-EG',{dateStyle:'medium'}).format(new Date(v))}catch(_){return v}}
+function fmt(v){if(!v)return'—';try{return new Intl.DateTimeFormat('ar-EG-u-nu-latn',{dateStyle:'medium'}).format(new Date(v))}catch(_){return v}}
 function generateKey(){const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',part=()=>Array.from({length:4},()=>chars[Math.floor(Math.random()*chars.length)]).join('');return`MZ-${part()}-${part()}`}
 function resultRows(result){return A().tursoDirect.rows(result)}
 async function listRecords(prefix){const rows=await A().tursoDirect.listPrefix(masterDb(),`${root()}/${prefix}`,{ensureSchema:true});return rows.filter(r=>!Number(r.deleted)).map(r=>r.payload).filter(Boolean)}

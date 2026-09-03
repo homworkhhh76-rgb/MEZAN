@@ -100,7 +100,7 @@
   }
   async function receiptCanvas(sale){
     const st=settings(),width=st.printSize==='58'?384:576,pad=st.printSize==='58'?12:16,inner=width-pad*2,scale=st.printSize==='58'?.78:1;
-    const font=(size,weight=600)=>`${weight} ${Math.max(10,Math.round(size*scale))}px Arial, Tahoma, sans-serif`;
+    const font=(size,weight=700)=>`${weight} ${Math.max(10,Math.round(size*scale))}px Arial, Tahoma, sans-serif`;
     const probe=document.createElement('canvas').getContext('2d');probe.font=font(18,700);
     const nameWidth=inner*(st.showInvoiceItemNumber!==false?.35:.40);let rowsHeight=0;for(const l of sale.lines||[]){rowsHeight+=Math.max(1,wrap(probe,l.productName,nameWidth).length)*Math.round(25*scale)+Math.round(12*scale)}
     const visibleMeta=(st.showInvoiceEmployee!==false||st.showInvoiceOrderType!==false||st.showInvoiceCustomer!==false||st.showInvoiceBranch!==false),visibleSummary=[st.showInvoiceQuantityTotal!==false,st.showInvoiceSubtotal!==false,st.showInvoiceDiscount!==false,st.showInvoiceTax!==false&&Number(sale.tax||0)!==0,st.showInvoicePaid!==false,st.showInvoiceDue!==false].filter(Boolean).length;
@@ -120,8 +120,8 @@
     if(st.showInvoiceNetAmount!==false){const rh=Math.round(58*scale),half=inner/2;rect(pad,y,inner,rh,2);ctx.beginPath();ctx.moveTo(pad+half,y);ctx.lineTo(pad+half,y+rh);ctx.lineWidth=2;ctx.stroke();txt('المبلغ الصافي :',width-pad-half/2,y+rh/2,21,700,'center');txt(`${moneyPlain(sale.total)} ₪`,pad+half/2,y+rh/2,23,800,'center');y+=rh+Math.round(8*scale)}
     if(st.showInvoiceMessage!==false&&D().company.invoiceNote){ctx.font=font(17,700);const lines=wrap(ctx,D().company.invoiceNote,inner-8),lh=Math.round(24*scale);lines.forEach(line=>{txt(line,width/2,y+lh/2,17,700,'center');y+=lh});y+=Math.round(5*scale)}
     // Optional Code39 remains available from settings, but hidden by default in the new receipt style.
-    if(st.showInvoiceBarcode===true){txt(`* ${sale.number} *`,width/2,y+Math.round(14*scale),12,500,'center');y+=Math.round(28*scale)}
-    if(st.showInvoiceFooterTime!==false||st.showInvoiceFooterNumber!==false){const dt=new Date(sale.createdAt||sale.updatedAt||Date.now()),dateTime=dt.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),rh=Math.round(30*scale);if(st.showInvoiceFooterTime!==false)txt(dateTime,pad,y+rh/2,12,500,'left');if(st.showInvoiceFooterNumber!==false)txt(sale.number,width-pad,y+rh/2,12,700,'right');y+=rh}
+    if(st.showInvoiceBarcode===true){txt(`* ${sale.number} *`,width/2,y+Math.round(14*scale),12,700,'center');y+=Math.round(28*scale)}
+    if(st.showInvoiceFooterTime!==false||st.showInvoiceFooterNumber!==false){const dt=new Date(sale.createdAt||sale.updatedAt||Date.now()),dateTime=dt.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),rh=Math.round(30*scale);if(st.showInvoiceFooterTime!==false)txt(dateTime,pad,y+rh/2,12,700,'left');if(st.showInvoiceFooterNumber!==false)txt(sale.number,width-pad,y+rh/2,12,700,'right');y+=rh}
     const finalH=Math.min(canvas.height,Math.ceil(y+Math.round(10*scale))),out=document.createElement('canvas');out.width=width;out.height=finalH;out.getContext('2d').drawImage(canvas,0,0,width,finalH,0,0,width,finalH);return out;
   }
   function rasterBytes(canvas){
