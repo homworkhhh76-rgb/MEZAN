@@ -59,3 +59,14 @@ reference SQL/backend accounting files: database-schema.sql and accounting-servi
 <!-- v7.50: طرف العميل/المورد أصبح له كشف حساب للفواتير والسندات مع +/− وتصدير Excel/PDF. أضيفت شجرة مصاريف ثلاثية المستويات، مراكز تكلفة ومشاريع، مدير فرع بملف دخول مستقل، ودورة نقل طلب/إخراج/طريق/استلام مع قيود تلقائية وإقفال. -->
 
 <!-- v7.50 Enterprise: party ledgers +/- vouchers, expense/cost-center/project trees, branch managers, inter-branch transfer workflow -->
+<section dir="rtl" style="font-family:Cairo,Tahoma,Arial,sans-serif;max-width:900px;margin:20px auto;padding:16px;border:1px solid #cbd5e1;border-radius:12px;background:#fff">
+<h2>v7.68 — مزامنة حية للشاشة + رصيد كاشير شكلي للسلة</h2>
+<ul>
+<li>إعادة بناء مزامنة Turso إلى Sync v4: ترتيب سحابي للدفعات وDelta-only بعد مطابقة الترقية الأولى.</li>
+<li>أي سجل يصل من جهاز آخر يُطبق على قاعدة الذاكرة المحلية ثم يحدث الشاشة المفتوحة مباشرة بدون Refresh يدوي.</li>
+<li>الكاشير يحدث رصيد بطاقات الأصناف فور وصول حركة مخزون، ويستقبل الأصناف والعملاء الجديدة أثناء العمل.</li>
+<li>زر المزامنة يجبر فحص السحابة وتحديث الواجهة الحالية فوراً.</li>
+<li>رصيد الصنف الظاهر في الكاشير يطرح كمية السلة مؤقتاً فقط، بينما المخزون الحقيقي لا يتغير إلا بعد اعتماد البيع.</li>
+<li>قبل اعتماد البيع يفحص الكاشير آخر رصيد متزامن لتقليل تعارض جهازين على نفس الصنف.</li>
+</ul>
+</section>

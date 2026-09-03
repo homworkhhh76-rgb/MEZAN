@@ -2,7 +2,7 @@
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
   const BACKUP_REMINDER_PREFIX='almezan_backup_reminder_v1::',BACKUP_REMINDER_MS=60*60*1000,KEY_MONITOR_MS=60*1000;
-  const APP_BUILD='7.67',APP_BUILD_TOKEN='767',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.68',APP_BUILD_TOKEN='768',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const PAGE_FILES={dashboard:'dashboard.html',cashier:'cashier.html',sales:'sales.html',purchases:'purchases.html',debts:'debts.html',installments:'installments.html',products:'products.html',stock:'stock.html',units:'units.html',transfers:'transfers.html',barcodes:'barcodes.html',accounts:'accounts.html',vouchers:'vouchers.html',cheques:'cheques.html',journals:'journals.html',expenses:'expenses.html',reports:'reports.html',customers:'customers.html','customer-groups':'customer-groups.html','price-groups':'price-groups.html',suppliers:'suppliers.html',representatives:'representatives.html',messaging:'messaging.html',branches:'branches.html',warehouses:'warehouses.html',employees:'employees.html',audit:'audit.html',settings:'settings.html'};
   const PAGE_BY_FILE=Object.fromEntries(Object.entries(PAGE_FILES).map(([view,file])=>[file,view]));
   function entryPageView(){const explicit=String(window.ALMEZAN_PAGE_VIEW||'').trim();if(explicit&&PAGE_FILES[explicit])return explicit;const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();return PAGE_BY_FILE[file]||'dashboard'}
@@ -209,14 +209,15 @@
     return true
   }
   function setDB(next,opts={}){db=normalizeDB(next);if(window.AlMezan)A.db=db;saveDB(true,opts)}
-  function replaceDBFromSync(next){
-    // v7.41: المزامنة صامتة تماماً على الواجهة. لا نعيد رسم الصفحة ولا نغلق القائمة ولا نغيّر التركيز.
-    // نحافظ كذلك على نفس مرجع كائن db حتى لا تتعطل النوافذ/النماذج المفتوحة التي تمسك به.
+  function replaceDBFromSync(next,syncDetail={}){
+    // v7.68: طبّق الدلتا في الذاكرة فوراً ثم أخبر الواجهة بالضبط ما الذي تغيّر.
+    // نحافظ على مرجع db نفسه حتى لا تتعطل نافذة مفتوحة، لكن الشاشة لم تعد تنتظر Refresh.
     const normalized=normalizeDB(next),target=db&&typeof db==='object'?db:{};
     Object.keys(target).forEach(k=>delete target[k]);Object.assign(target,normalized);db=target;
     saveDB(true,{fromSync:true});
     try{updateAlerts()}catch(_){}
-    window.dispatchEvent(new CustomEvent('almezan:data-synced',{detail:{at:Date.now()}}));
+    const detail={at:Date.now(),datasets:Array.isArray(syncDetail?.datasets)?syncDetail.datasets:[],records:syncDetail?.records||{},remoteBatch:Number(syncDetail?.remoteBatch||0),applied:Number(syncDetail?.applied||0)};
+    window.dispatchEvent(new CustomEvent('almezan:data-synced',{detail}));
   }
   function migrateLegacyDataToTenant(id){if(!id||hasTenantLocalData(id))return false;const legacy=localStorage.getItem(DB_BASE_KEY);if(!legacy)return false;try{const parsed=normalizeDB(JSON.parse(legacy));localStorage.setItem(scopedKey(DB_BASE_KEY,id),JSON.stringify(parsed));return true}catch(_){return false}}
   function switchTenant(id){id=String(id||tenantId()||'').trim();const migrated=migrateLegacyDataToTenant(id);db=loadDB();if(window.AlMezan)A.db=db;state.activeBranchId=localStorage.getItem(branchKey())||db.branches[0]?.id||'';try{state.cart=JSON.parse(localStorage.getItem(cartKey())||'[]')}catch(_){state.cart=[]}window.AlMezanSync?.resetForTenant?.(db);return{migrated,hasLocal:hasTenantLocalData(id)}}
@@ -425,7 +426,7 @@ function table(headers,rows,emptyHtml=''){
   }
   function badge(text,color=''){return `<span class="badge ${color}">${esc(text)}</span>`}
   function toast(message,type='success',duration=3200){const root=$('#toastRoot');if(!root)return;const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`${I(type==='error'?'alert':type==='warning'?'alert':'check',18)}<span>${esc(latinDigits(message))}</span>`;root.appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(-10px)';setTimeout(()=>el.remove(),200)},duration)}
-  function closeModal(){if(state.activeStream){state.activeStream.getTracks().forEach(t=>t.stop());state.activeStream=null}$('#modalRoot').innerHTML='';state.confirmCallback=null}
+  function closeModal(){if(state.activeStream){state.activeStream.getTracks().forEach(t=>t.stop());state.activeStream=null}$('#modalRoot').innerHTML='';state.confirmCallback=null;const cashierPending=state.pendingCashierSyncRefresh===true;if(cashierPending)state.pendingCashierSyncRefresh=false;if(state.pendingSyncUiRefresh||cashierPending){state.pendingSyncUiRefresh=false;setTimeout(()=>{if(state.view==='cashier')window.AlMezan?.cashierLiveSyncRefresh?.({datasets:['stock','products','customers','suppliers','sales','purchases']},true);else if(state.view==='dashboard')refreshDashboardFromSyncedData();else refreshVisibleViewFromSyncedData(pendingSyncedViewDetail||{})},0)}}
   function openModal({title,body,size='',submitText='حفظ',submitIcon='save',submitClass='btn-primary',cancelText='إلغاء',hideSubmit=false,onSubmit,afterOpen}){
     const root=$('#modalRoot'),formId='modalForm';root.innerHTML=`<section class="modal ${size}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-head"><h3>${esc(title)}</h3><button type="button" class="icon-button" data-action="close-modal">${I('close')}</button></div><form id="${formId}"><div class="modal-body">${body}</div><div class="modal-foot">${hideSubmit?'':`<button class="btn ${submitClass}" type="submit">${I(submitIcon)}${esc(submitText)}</button>`}<button class="btn btn-ghost" type="button" data-action="close-modal">${esc(cancelText)}</button></div></form></section>`;
     const form=$('#'+formId);if(onSubmit)form.addEventListener('submit',async e=>{e.preventDefault();const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;try{const result=await onSubmit(new FormData(form),form);if(result!==false)closeModal()}catch(err){toast(err.message||'تعذر إكمال العملية','error');if(btn)btn.disabled=false}});root.onclick=e=>{if(e.target===root)closeModal()};injectIcons(root);enhanceSelects(root);blankZeroNumbers(root);setTimeout(()=>{const first=$('input:not([type=hidden]),select,textarea',form);first?.focus();afterOpen?.(form);blankZeroNumbers(root);normalizeLatinNumerals(root)},30)
@@ -707,16 +708,19 @@ function enhanceSelects(root=document){
     }catch(_){}});return{payload,user,verified}
   }
   function updateSyncUi(detail={}){const btn=$('#syncNowBtn'),badge=$('#syncPendingBadge');if(!btn)return;const pending=Number(detail.pending??window.AlMezanSync?.pendingCount?.()??0);btn.classList.toggle('is-syncing',detail.busy===true||detail.state==='syncing');btn.classList.toggle('sync-error',detail.state==='error');btn.classList.toggle('sync-ok',detail.state==='success'&&pending===0);btn.title=detail.state==='syncing'?'جاري المزامنة...':pending?`مزامنة الآن — ${pending} تغيير معلق`:'مزامنة الآن';if(badge){badge.textContent=pending>99?'99+':String(pending);badge.classList.toggle('show',pending>0)}}
-  let syncedViewRefreshTimer=0;
-  function refreshVisibleViewFromSyncedData(){
+  let syncedViewRefreshTimer=0,pendingSyncedViewDetail=null;
+  function refreshVisibleViewFromSyncedData(eventOrDetail={}){
     if(!currentUser()||state.view==='dashboard'||state.view==='cashier'||state.financialPreviewMode)return;
+    const detail=eventOrDetail?.detail||eventOrDetail||{};pendingSyncedViewDetail=detail;
     clearTimeout(syncedViewRefreshTimer);syncedViewRefreshTimer=setTimeout(()=>{
       const modal=$('#modalRoot'),active=document.activeElement;
-      if(modal?.children?.length||active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName)){refreshVisibleViewFromSyncedData();return}
+      if(modal?.children?.length){state.pendingSyncUiRefresh=true;return}
+      // لا نهدم حقلاً يكتب فيه المستخدم؛ البيانات نفسها وصلت ونحدّث الجدول فور انتهاء الإدخال.
+      if(active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName)&&active.closest('#workspace')){state.pendingSyncUiRefresh=true;return}
       const ws=$('#workspace');if(!ws||!state.views[state.view])return;
-      const x=window.scrollX,y=window.scrollY;
-      try{state.views[state.view](ws);injectIcons(ws);enhanceSelects(ws);blankZeroNumbers(ws);requestAnimationFrame(()=>window.scrollTo(x,y))}catch(err){console.warn('Synced view refresh:',err)}
-    },90)
+      const x=window.scrollX,y=window.scrollY;state.pendingSyncUiRefresh=false;
+      try{state.views[state.view](ws);injectIcons(ws);enhanceSelects(ws);blankZeroNumbers(ws);pendingSyncedViewDetail=null;requestAnimationFrame(()=>window.scrollTo(x,y))}catch(err){console.warn('Synced view refresh:',err)}
+    },35)
   }
   let dashboardRefreshTimer=0;
   function refreshDashboardFromSyncedData(){
@@ -762,7 +766,7 @@ function enhanceSelects(root=document){
     if(invoicePrintLock.id===id&&at-invoicePrintLock.at<1800){try{invoicePrintWindow?.focus?.()}catch(_){}return true}
     invoicePrintLock={id,at};
     const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,7)}`;
-    const url=`./index.html?v=749&printToken=${encodeURIComponent(token)}#print-invoice/${encodeURIComponent(id)}`;
+    const url=`./index.html?v=768&printToken=${encodeURIComponent(token)}#print-invoice/${encodeURIComponent(id)}`;
     try{
       if(invoicePrintWindow&&!invoicePrintWindow.closed){invoicePrintWindow.location.replace(url);invoicePrintWindow.focus();return true}
       invoicePrintWindow=window.open(url,'almezanInvoicePrint');
@@ -786,7 +790,7 @@ function enhanceSelects(root=document){
     $('#openSidebar').addEventListener('click',()=>{const willOpen=!$('#sidebar').classList.contains('open');$('#sidebar').classList.toggle('open',willOpen);$('#sidebarOverlay').classList.toggle('open',willOpen)});
     $('#closeSidebar').addEventListener('click',()=>{$('#sidebar').classList.remove('open');$('#sidebarOverlay').classList.remove('open')});$('#sidebarOverlay').addEventListener('click',()=>$('#closeSidebar').click());
     $('#activeBranch').addEventListener('change',e=>{state.activeBranchId=e.target.value;localStorage.setItem(branchKey(),state.activeBranchId);renderCurrent()});
-    $('#globalSearchBtn').addEventListener('click',globalSearch);$('#notificationBtn').addEventListener('click',showAlerts);$('#userMenuBtn').addEventListener('click',userMenu);$('#syncNowBtn')?.addEventListener('click',()=>window.AlMezanSync?.syncNow?.({manual:true,checkRemote:true}));window.addEventListener('almezan:sync-status',e=>updateSyncUi(e.detail||{}));window.addEventListener('almezan:data-synced',refreshDashboardFromSyncedData);window.addEventListener('almezan:data-synced',refreshVisibleViewFromSyncedData);updateSyncUi();setInterval(()=>ensureHourlyBackupReminder(),60000);setInterval(()=>monitorCompanyKey().catch(()=>{}),KEY_MONITOR_MS);window.addEventListener('online',()=>monitorCompanyKey().catch(()=>{}));
+    $('#globalSearchBtn').addEventListener('click',globalSearch);$('#notificationBtn').addEventListener('click',showAlerts);$('#userMenuBtn').addEventListener('click',userMenu);$('#syncNowBtn')?.addEventListener('click',async()=>{const r=await window.AlMezanSync?.syncNow?.({manual:true,checkRemote:true,force:true});if(r?.success&&Number(r.applied||0)===0){if(state.view==='cashier')window.AlMezan?.cashierLiveSyncRefresh?.({datasets:[]},true);else if(state.view==='dashboard')refreshDashboardFromSyncedData();else refreshVisibleViewFromSyncedData({force:true})}});window.addEventListener('almezan:sync-status',e=>updateSyncUi(e.detail||{}));window.addEventListener('almezan:data-synced',refreshDashboardFromSyncedData);window.addEventListener('almezan:data-synced',refreshVisibleViewFromSyncedData);document.addEventListener('focusout',()=>{if(state.pendingSyncUiRefresh&&!$('#modalRoot')?.children?.length)setTimeout(()=>refreshVisibleViewFromSyncedData(pendingSyncedViewDetail||{}),0)});updateSyncUi();setInterval(()=>ensureHourlyBackupReminder(),60000);setInterval(()=>monitorCompanyKey().catch(()=>{}),KEY_MONITOR_MS);window.addEventListener('online',()=>monitorCompanyKey().catch(()=>{}));
     document.addEventListener('pointerover',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch')showNavTooltip(b)});document.addEventListener('pointerout',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch'&&!b.contains(e.relatedTarget))hideNavTooltip()});document.addEventListener('pointerdown',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType==='touch')showNavTooltip(b,1300)});
     document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))closeCustomSelects();const view=e.target.closest('[data-view]');if(view&&!view.dataset.action){const side=view.closest('#sidebar');e.preventDefault();if(side&&(window.innerWidth>=901||document.documentElement.classList.contains('tablet-desktop'))&&!side.classList.contains('open')){side.classList.add('open');$('#sidebarOverlay')?.classList.add('open');document.documentElement.classList.add('sidebar-open');hideNavTooltip();return}navigate(view.dataset.view);if(side){closeSidebarUI();hideNavTooltip()}return}const btn=e.target.closest('[data-action]');if(!btn)return;const fn=state.actions[btn.dataset.action];if(fn){e.preventDefault();fn(btn,e)}});
     let lastViewportWidth=window.innerWidth;window.addEventListener('scroll',e=>{const open=$('.custom-select.open');if(!open)return;const active=document.activeElement;if(active&&open.contains(active)&&active.matches('input[type=search]')){open._repositionSelectMenu?.();return}if(e.target&&open.contains(e.target))return;closeCustomSelects()},true);window.addEventListener('resize',()=>{const widthChanged=Math.abs(window.innerWidth-lastViewportWidth)>24;lastViewportWidth=window.innerWidth;const open=$('.custom-select.open');if(!open)return;if(widthChanged)closeCustomSelects();else open._repositionSelectMenu?.()});window.visualViewport?.addEventListener('resize',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.visualViewport?.addEventListener('scroll',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.addEventListener('hashchange',()=>renderCurrent(routeViewFromLocation()));window.addEventListener('popstate',()=>{const v=routeViewFromLocation();state.view=v;renderCurrent(v)});window.addEventListener('online',()=>{$('#offlineNotice').hidden=true});window.addEventListener('offline',()=>{$('#offlineNotice').hidden=false});$('#offlineNotice').hidden=navigator.onLine;
