@@ -2,7 +2,7 @@
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
   const BACKUP_REMINDER_PREFIX='almezan_backup_reminder_v1::',BACKUP_REMINDER_MS=60*60*1000,KEY_MONITOR_MS=60*1000;
-  const APP_BUILD='7.55',APP_BUILD_TOKEN='755',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.61',APP_BUILD_TOKEN='761',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const PAGE_FILES={dashboard:'dashboard.html',cashier:'cashier.html',sales:'sales.html',purchases:'purchases.html',debts:'debts.html',installments:'installments.html',products:'products.html',stock:'stock.html',units:'units.html',transfers:'transfers.html',barcodes:'barcodes.html',accounts:'accounts.html',vouchers:'vouchers.html',cheques:'cheques.html',journals:'journals.html',expenses:'expenses.html',reports:'reports.html',customers:'customers.html','customer-groups':'customer-groups.html','price-groups':'price-groups.html',suppliers:'suppliers.html',representatives:'representatives.html',messaging:'messaging.html',branches:'branches.html',warehouses:'warehouses.html',employees:'employees.html',audit:'audit.html',settings:'settings.html'};
   const PAGE_BY_FILE=Object.fromEntries(Object.entries(PAGE_FILES).map(([view,file])=>[file,view]));
   function entryPageView(){const explicit=String(window.ALMEZAN_PAGE_VIEW||'').trim();if(explicit&&PAGE_FILES[explicit])return explicit;const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();return PAGE_BY_FILE[file]||'dashboard'}
@@ -99,6 +99,20 @@
       {id:'ACC-1000',code:'1000',name:'الأصول',type:'asset',parentId:'',level:0},{id:'ACC-1100',code:'1100',name:'الصندوق والبنوك',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1110',code:'1110',name:'الصندوق الرئيسي',type:'asset',parentId:'ACC-1100',level:2},{id:'ACC-1120',code:'1120',name:'الحساب البنكي',type:'asset',parentId:'ACC-1100',level:2},{id:'ACC-1200',code:'1200',name:'ذمم العملاء',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1300',code:'1300',name:'المخزون',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1400',code:'1400',name:'ضريبة القيمة المضافة المدخلة',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-2000',code:'2000',name:'الالتزامات',type:'liability',parentId:'',level:0},{id:'ACC-2100',code:'2100',name:'ذمم الموردين',type:'liability',parentId:'ACC-2000',level:1},{id:'ACC-2200',code:'2200',name:'ضريبة القيمة المضافة المستحقة',type:'liability',parentId:'ACC-2000',level:1},{id:'ACC-3000',code:'3000',name:'حقوق الملكية',type:'equity',parentId:'',level:0},{id:'ACC-3200',code:'3200',name:'الأرصدة الافتتاحية',type:'equity',parentId:'ACC-3000',level:1},{id:'ACC-4000',code:'4000',name:'الإيرادات',type:'revenue',parentId:'',level:0},{id:'ACC-4100',code:'4100',name:'إيرادات المبيعات',type:'revenue',parentId:'ACC-4000',level:1},{id:'ACC-4230',code:'4230',name:'أرباح تسوية المخزون',type:'revenue',parentId:'ACC-4000',level:1},{id:'ACC-5000',code:'5000',name:'المصروفات',type:'expense',parentId:'',level:0},{id:'ACC-5100',code:'5100',name:'تكلفة البضاعة المباعة',type:'expense',parentId:'ACC-5000',level:1},{id:'ACC-5200',code:'5200',name:'المصروفات التشغيلية',type:'expense',parentId:'ACC-5000',level:1},{id:'ACC-5230',code:'5230',name:'خسائر وتسويات المخزون',type:'expense',parentId:'ACC-5000',level:1}
     ]};
   }
+  const NEWEST_FIRST_DATASETS=new Set(['sales','purchases','transfers','transferRequests','vouchers','cheques','finance','journals','expenses','revenues','employees','customers','suppliers','representatives' ,'products','audit','shifts','shiftLogs','notifications','heldOrders','installmentContracts','projects','payrollRuns']);
+  function recordTimeValue(x){
+    if(!x||typeof x!=='object')return 0;
+    const raw=x.updatedAt||x.createdAt||x.closedAt||x.openedAt||x.date||x.issueDate||x.dueDate||'';
+    const t=Date.parse(raw);if(Number.isFinite(t))return t;
+    const n=Number(raw);return Number.isFinite(n)?n:0
+  }
+  function sortNewestCollections(raw){
+    for(const key of NEWEST_FIRST_DATASETS){
+      const arr=raw?.[key];if(!Array.isArray(arr)||arr.length<2)continue;
+      arr.sort((a,b)=>recordTimeValue(b)-recordTimeValue(a)||String(b?.id||b?.number||'').localeCompare(String(a?.id||a?.number||''),undefined,{numeric:true}))
+    }
+    return raw
+  }
   function normalizeDB(raw){
     const base=defaultDB();
     if(!raw||typeof raw!=='object')return base;
@@ -150,7 +164,7 @@
     }
     // الإصدار 3 يعتمد الواجهة الرمادية الفاتحة كافتراضي احترافي.
     if(num(raw.version)<3){raw.settings.theme='light'}if(num(raw.version)<4)raw.version=4
-    return raw
+    sortNewestCollections(raw);return raw
   }
   function hasTenantLocalData(id=tenantId()){return !!(id&&localStorage.getItem(scopedKey(DB_BASE_KEY,id)))}
   function loadDB(){try{return normalizeDB(JSON.parse(localStorage.getItem(dbKey())))}catch(e){return defaultDB()}}
@@ -177,6 +191,7 @@
   }
   function saveDB(force=false,opts={}){
     if(state.financialPreviewMode&&!force)return true;
+    sortNewestCollections(db);
     const savedAt=Date.now();let fastSaved=false;
     try{localStorage.setItem(dbKey(),JSON.stringify(db));localStorage.setItem(dbSavedKey(),String(savedAt));fastSaved=true}
     catch(e){
@@ -187,6 +202,7 @@
     try{window.AlMezan?.refreshPricingCache?.()}catch(_){}
     if(!opts.fromSync)try{window.AlMezanSync?.capture?.(db)}catch(_){}
     try{window.AlMezanSync?.mirrorDb?.(db,{savedAt})}catch(_){}
+    if(!opts.fromSync)try{window.AlMezanSync?.requestSync?.(120)}catch(_){}
     try{window.dispatchEvent(new CustomEvent('almezan:local-save',{detail:{savedAt,fastSaved}}))}catch(_){}
     return true
   }
@@ -202,7 +218,7 @@
   }
   function migrateLegacyDataToTenant(id){if(!id||hasTenantLocalData(id))return false;const legacy=localStorage.getItem(DB_BASE_KEY);if(!legacy)return false;try{const parsed=normalizeDB(JSON.parse(legacy));localStorage.setItem(scopedKey(DB_BASE_KEY,id),JSON.stringify(parsed));return true}catch(_){return false}}
   function switchTenant(id){id=String(id||tenantId()||'').trim();const migrated=migrateLegacyDataToTenant(id);db=loadDB();if(window.AlMezan)A.db=db;state.activeBranchId=localStorage.getItem(branchKey())||db.branches[0]?.id||'';try{state.cart=JSON.parse(localStorage.getItem(cartKey())||'[]')}catch(_){state.cart=[]}window.AlMezanSync?.resetForTenant?.(db);return{migrated,hasLocal:hasTenantLocalData(id)}}
-  function atomicMutation(fn){const backup=clone(db);try{const out=fn();if(out&&typeof out.then==='function')return out.catch(err=>{db=normalizeDB(backup);saveDB(true);throw err});return out}catch(err){db=normalizeDB(backup);saveDB(true);throw err}}
+  function atomicMutation(fn){const backup=clone(db);try{const out=fn();if(out&&typeof out.then==='function')return out.then(value=>{saveDB();return value}).catch(err=>{db=normalizeDB(backup);if(window.AlMezan)A.db=db;saveDB(true);throw err});saveDB();return out}catch(err){db=normalizeDB(backup);if(window.AlMezan)A.db=db;saveDB(true);throw err}}
   function getSession(){try{const s=JSON.parse(sessionStorage.getItem(SESSION_KEY)||localStorage.getItem(SESSION_KEY)||'null');if(s&&tenantId()&&String(s.companyId||s.tenantId||'')!==tenantId())return null;return s}catch(e){return null}}
   function currentUser(){
     const s=getSession();if(!s)return null;
@@ -211,7 +227,19 @@
   }
   function has(permission){const u=currentUser(),s=getSession();return !!u&&(s?.type==='company-manager'||u.system||(u.permissions||[]).includes(permission))}
   function audit(action,entity,details){const u=currentUser();db.audit.unshift({id:uid('LOG'),date:now(),userId:u?.id||'SYSTEM',userName:u?.name||'النظام',action,entity,details:String(details||'')});if(db.audit.length>2000)db.audit.length=2000;saveDB()}
-  function nextNo(type,prefix){db.sequences[type]=(db.sequences[type]||0)+1;return `${prefix||''}${String(db.sequences[type]).padStart(6,'0')}`}
+  function maxDocumentSequence(type,prefix=''){
+    const map={sale:'sales',purchase:'purchases',voucher:'vouchers',journal:'journals',transfer:'transfers',transferRequest:'transferRequests'};
+    const arr=db[map[type]]||[],escaped=String(prefix||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),rx=new RegExp('^'+escaped+'-?(\\d+)$','i');
+    let max=Number(db.sequences?.[type]||0);
+    for(const x of arr){
+      const value=String(x?.number||'').trim(),exact=value.match(rx),suffix=value.match(/(\d+)\s*$/);
+      if(exact)max=Math.max(max,Number(exact[1])||0);
+      else if(suffix)max=Math.max(max,Number(suffix[1])||0);
+    }
+    if(db.sequences)db.sequences[type]=Math.max(Number(db.sequences[type]||0),max);
+    return max
+  }
+  function nextNo(type,prefix){const next=maxDocumentSequence(type,prefix)+1;db.sequences[type]=Math.max(Number(db.sequences[type]||0),next);return `${prefix||''}${String(next).padStart(6,'0')}`}
   function money(v){const cur=db.company.currency||'₪';return `${new Intl.NumberFormat('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}).format(num(v))} ${esc(cur)}`}
   function dateFmt(v,withTime=false){if(!v)return '—';try{return new Intl.DateTimeFormat('ar-EG',withTime?{dateStyle:'medium',timeStyle:'short'}:{dateStyle:'medium'}).format(new Date(v))}catch(e){return esc(v)}}
   function branchName(id){return db.branches.find(x=>x.id===id)?.name||'—'}
@@ -649,7 +677,7 @@ function enhanceSelects(root=document){
       if(cached&&navigator.onLine!==false)monitorCompanyKey().catch(()=>{});
       const firstSync=window.AlMezanSync?.needsBootstrap?.()===true;
       if(firstSync&&navigator.onLine!==false){const pulled=await window.AlMezanSync.pullAll().catch(()=>({error:true,remoteRows:-1}));if(!pulled.error&&Number(pulled.remoteRows||0)===0&&(hadLocal||hadLegacy||switched.migrated||!hadLocal&&!hadLegacy))window.AlMezanSync.seedAll(db)}
-      await window.AlMezanSync?.syncNow?.({manual:false,force:true});
+      if(window.AlMezanSync?.pendingCount?.()>0)await window.AlMezanSync?.syncNow?.({manual:false});else await window.AlMezanSync?.checkRemote?.({force:true});
     }catch(_){}});return{payload,user,verified}
   }
   function updateSyncUi(detail={}){const btn=$('#syncNowBtn'),badge=$('#syncPendingBadge');if(!btn)return;const pending=Number(detail.pending??window.AlMezanSync?.pendingCount?.()??0);btn.classList.toggle('is-syncing',detail.busy===true||detail.state==='syncing');btn.classList.toggle('sync-error',detail.state==='error');btn.classList.toggle('sync-ok',detail.state==='success'&&pending===0);btn.title=detail.state==='syncing'?'جاري المزامنة...':pending?`مزامنة الآن — ${pending} تغيير معلق`:'مزامنة الآن';if(badge){badge.textContent=pending>99?'99+':String(pending);badge.classList.toggle('show',pending>0)}}
@@ -705,7 +733,7 @@ function enhanceSelects(root=document){
     }catch(_){ }
     return false
   }
-  const A=window.AlMezan={get db(){return db},set db(v){db=v},state,$,$$,esc,num,clone,today,now,uid,hash,I,injectIcons,PERMISSIONS,ALL_PERMISSIONS,NAV,PAGE_META,saveDB,setDB,replaceDBFromSync,switchTenant,hasTenantLocalData,getSession,atomicMutation,currentUser,installApp,installStatus,canInstallApp,has,audit,nextNo,money,dateFmt,branchName,warehouseName,stockQty,totalStock,effectiveProductStock,adjustStock,updateWeightedAverageCost,productUnit,unitBreakdown,accountBalance,accountDescendantIds,accountPeriodTotals,accountNet,effectiveJournalLines,financialSummary,paymentAccounts,fxRate,validateOpenFinancialDate,normalizeJournalLines,validateJournalLines,postJournal,persistCart,options,pageHead,emptyState,table,badge,toast,openModal,closeModal,confirmDialog,downloadBlob,exportExcel,tableExportData,exportTableExcel,exportTablePDF,parseCSV,setFilePicker,enhanceSelects,blankZeroNumbers,registerView,registerAction,navigate,renderCurrent,applyTheme,playBarcodeSound,productImageSrc,ensureHourlyBackupReminder,monitorCompanyKey,openInvoicePrintOnce};
+  const A=window.AlMezan={get db(){return db},set db(v){db=v},state,$,$$,esc,num,clone,today,now,uid,hash,I,injectIcons,PERMISSIONS,ALL_PERMISSIONS,NAV,PAGE_META,saveDB,setDB,replaceDBFromSync,switchTenant,hasTenantLocalData,getSession,atomicMutation,currentUser,installApp,installStatus,canInstallApp,has,audit,nextNo,maxDocumentSequence,money,dateFmt,branchName,warehouseName,stockQty,totalStock,effectiveProductStock,adjustStock,updateWeightedAverageCost,productUnit,unitBreakdown,accountBalance,accountDescendantIds,accountPeriodTotals,accountNet,effectiveJournalLines,financialSummary,paymentAccounts,fxRate,validateOpenFinancialDate,normalizeJournalLines,validateJournalLines,postJournal,persistCart,options,pageHead,emptyState,table,badge,toast,openModal,closeModal,confirmDialog,downloadBlob,exportExcel,tableExportData,exportTableExcel,exportTablePDF,parseCSV,setFilePicker,enhanceSelects,blankZeroNumbers,registerView,registerAction,navigate,renderCurrent,applyTheme,playBarcodeSound,productImageSrc,ensureHourlyBackupReminder,monitorCompanyKey,openInvoicePrintOnce};
 
   registerAction('retry-view',b=>{const v=b.dataset.view||state.view;viewRecovery.delete(v);recoverMissingView(v)||renderCurrent(v)});registerAction('close-modal',closeModal);registerAction('export-table-pdf',b=>exportTablePDF(b));registerAction('export-table-excel',b=>exportTableExcel(b));registerAction('table-page',b=>{const block=b.closest('.data-table-block');if(!block)return;renderVirtualTablePage(block,Number(b.dataset.page)||1);block.scrollIntoView({behavior:'smooth',block:'start'})});registerAction('open-mobile-menu',()=>{$('#sidebar').classList.add('open');$('#sidebarOverlay').classList.add('open')});registerAction('search-go',b=>{closeModal();navigate(b.dataset.view)});registerAction('print-invoice',b=>{if(window.AlMezanBluetoothPrinter?.printInvoiceById)return window.AlMezanBluetoothPrinter.printInvoiceById(b.dataset.id);openInvoicePrintOnce(b.dataset.id)});registerAction('toggle-theme',()=>{db.settings.theme=db.settings.theme==='dark'?'light':'dark';saveDB();applyTheme();closeModal();renderCurrent()});registerAction('logout',()=>{$('#logoutBtn').click()});
 
@@ -721,7 +749,7 @@ function enhanceSelects(root=document){
     $('#openSidebar').addEventListener('click',()=>{const willOpen=!$('#sidebar').classList.contains('open');$('#sidebar').classList.toggle('open',willOpen);$('#sidebarOverlay').classList.toggle('open',willOpen)});
     $('#closeSidebar').addEventListener('click',()=>{$('#sidebar').classList.remove('open');$('#sidebarOverlay').classList.remove('open')});$('#sidebarOverlay').addEventListener('click',()=>$('#closeSidebar').click());
     $('#activeBranch').addEventListener('change',e=>{state.activeBranchId=e.target.value;localStorage.setItem(branchKey(),state.activeBranchId);renderCurrent()});
-    $('#globalSearchBtn').addEventListener('click',globalSearch);$('#notificationBtn').addEventListener('click',showAlerts);$('#userMenuBtn').addEventListener('click',userMenu);$('#syncNowBtn')?.addEventListener('click',()=>window.AlMezanSync?.syncNow?.({manual:true,force:true}));window.addEventListener('almezan:sync-status',e=>updateSyncUi(e.detail||{}));window.addEventListener('almezan:data-synced',refreshDashboardFromSyncedData);updateSyncUi();setInterval(()=>ensureHourlyBackupReminder(),60000);setInterval(()=>monitorCompanyKey().catch(()=>{}),KEY_MONITOR_MS);window.addEventListener('online',()=>monitorCompanyKey().catch(()=>{}));
+    $('#globalSearchBtn').addEventListener('click',globalSearch);$('#notificationBtn').addEventListener('click',showAlerts);$('#userMenuBtn').addEventListener('click',userMenu);$('#syncNowBtn')?.addEventListener('click',()=>window.AlMezanSync?.syncNow?.({manual:true,checkRemote:true}));window.addEventListener('almezan:sync-status',e=>updateSyncUi(e.detail||{}));window.addEventListener('almezan:data-synced',refreshDashboardFromSyncedData);updateSyncUi();setInterval(()=>ensureHourlyBackupReminder(),60000);setInterval(()=>monitorCompanyKey().catch(()=>{}),KEY_MONITOR_MS);window.addEventListener('online',()=>monitorCompanyKey().catch(()=>{}));
     document.addEventListener('pointerover',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch')showNavTooltip(b)});document.addEventListener('pointerout',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType!=='touch'&&!b.contains(e.relatedTarget))hideNavTooltip()});document.addEventListener('pointerdown',e=>{const b=e.target.closest('#sidebar:not(.open) .nav-item');if(b&&e.pointerType==='touch')showNavTooltip(b,1300)});
     document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))closeCustomSelects();const view=e.target.closest('[data-view]');if(view&&!view.dataset.action){const side=view.closest('#sidebar');e.preventDefault();if(side&&(window.innerWidth>=901||document.documentElement.classList.contains('tablet-desktop'))&&!side.classList.contains('open')){side.classList.add('open');$('#sidebarOverlay')?.classList.add('open');document.documentElement.classList.add('sidebar-open');hideNavTooltip();return}navigate(view.dataset.view);if(side){closeSidebarUI();hideNavTooltip()}return}const btn=e.target.closest('[data-action]');if(!btn)return;const fn=state.actions[btn.dataset.action];if(fn){e.preventDefault();fn(btn,e)}});
     let lastViewportWidth=window.innerWidth;window.addEventListener('scroll',e=>{const open=$('.custom-select.open');if(!open)return;const active=document.activeElement;if(active&&open.contains(active)&&active.matches('input[type=search]')){open._repositionSelectMenu?.();return}if(e.target&&open.contains(e.target))return;closeCustomSelects()},true);window.addEventListener('resize',()=>{const widthChanged=Math.abs(window.innerWidth-lastViewportWidth)>24;lastViewportWidth=window.innerWidth;const open=$('.custom-select.open');if(!open)return;if(widthChanged)closeCustomSelects();else open._repositionSelectMenu?.()});window.visualViewport?.addEventListener('resize',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.visualViewport?.addEventListener('scroll',()=>{$('.custom-select.open')?._repositionSelectMenu?.()});window.addEventListener('hashchange',()=>renderCurrent(routeViewFromLocation()));window.addEventListener('popstate',()=>{const v=routeViewFromLocation();state.view=v;renderCurrent(v)});window.addEventListener('online',()=>{$('#offlineNotice').hidden=true});window.addEventListener('offline',()=>{$('#offlineNotice').hidden=false});$('#offlineNotice').hidden=navigator.onLine;
