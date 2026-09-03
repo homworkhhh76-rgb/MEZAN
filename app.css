@@ -1748,3 +1748,22 @@ body.printing .print-view{background:#fff;}
   .table-export-button .export-file-svg{width:21px!important;height:21px!important}
   .financial-periods-page .data-table{min-width:720px!important}
 }
+
+
+/* v7.64 branch/unit-chain inventory */
+.unit-stock-stack{display:inline-flex;flex-direction:column;gap:2px;vertical-align:middle;line-height:1.12;text-align:right;direction:rtl;min-width:58px}
+.unit-stock-line{display:flex;align-items:baseline;justify-content:flex-start;gap:5px;white-space:nowrap}
+.unit-stock-line b{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.unit-stock-line small{font-size:10px;color:var(--muted);font-weight:400}
+.product-stock{display:flex!important;flex-direction:column;align-items:flex-start;gap:2px;max-width:48%;height:auto!important;min-height:24px;white-space:normal!important}
+.product-stock .unit-stock-stack{min-width:0;gap:1px}
+.product-stock .unit-stock-line b{font-size:10px}
+.product-stock .unit-stock-line small{font-size:9px}
+.variant-stock-head{font-size:9px;font-weight:700;white-space:nowrap}
+.variant-stock-breakdown{display:flex!important;gap:5px;align-items:flex-start}
+.manager-auth-setting{border:1px solid color-mix(in srgb,var(--red) 24%,var(--border));background:color-mix(in srgb,var(--red) 4%,var(--surface))}
+.manager-auth-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.manager-auth-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--red) 10%,var(--surface));color:var(--red);flex:0 0 auto}
+.manager-auth-head h3{margin:0 0 4px}.manager-auth-head p{margin:0;color:var(--muted);font-size:12px;line-height:1.7}
+.manager-auth-setting>.btn{width:100%;justify-content:center;margin-bottom:8px}
+@media(max-width:640px){.unit-stock-stack{min-width:48px}.unit-stock-line b{font-size:11px}.unit-stock-line small{font-size:9px}.product-stock{max-width:52%}}
