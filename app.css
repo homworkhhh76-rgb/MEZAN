@@ -1793,3 +1793,55 @@ strong,b,h1,h2,h3,h4,h5,h6,.btn,.metric-card strong,.total-row.grand{font-weight
 .manager-auth-download-ready .btn{width:100%;max-width:420px;justify-content:center;margin-top:4px}
 .manager-auth-download-ready .btn svg{width:20px;height:20px}
 .manager-auth-download-ready small{color:var(--muted)}
+
+/* ===== v7.73 continuous voice cashier ===== */
+.cashier-utility-strip{flex-wrap:nowrap!important;white-space:nowrap!important}
+.cashier-utility-icon{position:relative;display:grid!important;place-items:center;flex:0 0 36px;width:36px;height:36px;min-width:36px;padding:0!important;border-radius:9px}
+.cashier-utility-badge{position:absolute;top:-4px;left:-4px;display:grid;place-items:center;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:#c83f49;color:#fff;font-size:7px;line-height:1;border:2px solid var(--panel,#fff)}
+.cashier-voice-button{position:relative;overflow:visible!important;isolation:isolate}
+.cashier-voice-button .voice-mic-icon{display:grid;place-items:center;transition:opacity .15s,transform .15s}
+.cashier-voice-button .voice-wave{position:absolute;inset:7px 6px;display:flex;align-items:center;justify-content:center;gap:2px;opacity:0;pointer-events:none}
+.cashier-voice-button .voice-wave i{display:block;width:2px;height:calc(4px + 13px * var(--voice-amp,.2));max-height:20px;border-radius:999px;background:currentColor;transform-origin:center;transition:height .06s linear}
+.cashier-voice-button .voice-live-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#e34854;box-shadow:0 0 0 3px rgba(227,72,84,.16);animation:voice-live-pulse 1.15s ease-in-out infinite}
+.cashier-voice-button.listening{color:#fff!important;background:#2367c9!important;border-color:#2367c9!important;box-shadow:0 0 0 3px rgba(35,103,201,.13),0 5px 15px rgba(35,103,201,.22)!important}
+.cashier-voice-button.listening .voice-mic-icon{opacity:0;transform:scale(.75)}
+.cashier-voice-button.listening .voice-wave{opacity:1}
+@keyframes voice-live-pulse{0%,100%{transform:scale(.85);opacity:.7}50%{transform:scale(1.18);opacity:1}}
+@media(max-width:900px){
+  .cashier-utility-mobile{display:flex!important;align-items:center!important;gap:3px!important;flex-wrap:nowrap!important;overflow:visible!important}
+  .cashier-utility-mobile .cashier-utility-icon{display:grid!important;flex:0 0 32px!important;width:32px!important;height:32px!important;min-width:32px!important}
+}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon{display:grid!important;flex:0 0 30px!important;width:30px!important;height:30px!important;min-width:30px!important;padding:0!important;font-size:0!important}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon svg{width:14px!important;height:14px!important}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon:nth-child(n){display:grid!important}
+html.coarse-ui .cashier-utility-strip .btn:nth-child(n+3){display:initial!important}
+html.coarse-ui .cashier-voice-button .voice-wave{inset:6px 5px;gap:1.5px}
+
+
+/* ===== v7.74 microphone visibility + stable category touch scroll ===== */
+.cashier-filters{
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  flex-wrap:nowrap!important;
+  overscroll-behavior-x:contain;
+  scroll-behavior:auto!important;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x!important;
+  scrollbar-width:thin;
+}
+.cashier-filters .category-chip{flex:0 0 auto!important;touch-action:manipulation}
+.cashier-utility-strip .cashier-voice-button,
+.cashier-action-cluster .cashier-voice-button{
+  display:grid!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.cashier-utility-mobile .cashier-voice-button{order:4!important}
+.cashier-utility-mobile [data-action="calculator"]{order:3!important}
+.cashier-utility-mobile [data-action="show-held"]{order:2!important}
+.cashier-utility-mobile [data-action="camera-scan"]{order:1!important}
+@media(max-width:900px){
+  .cashier-utility-mobile{max-width:none!important;overflow:visible!important}
+  .cashier-utility-mobile .cashier-voice-button{display:grid!important;flex:0 0 32px!important;width:32px!important;height:32px!important;min-width:32px!important}
+}
+html.coarse-ui .cashier-utility-strip .cashier-voice-button{display:grid!important}

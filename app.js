@@ -2,7 +2,7 @@
   'use strict';
   const DB_BASE_KEY='almezan_pro_database_v1',SESSION_KEY='almezan_pro_session',CART_BASE_KEY='almezan_pro_cart',BRANCH_BASE_KEY='almezan_active_branch',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
   const BACKUP_REMINDER_PREFIX='almezan_backup_reminder_v1::',BACKUP_REMINDER_MS=60*60*1000,KEY_MONITOR_MS=60*1000;
-  const APP_BUILD='7.70',APP_BUILD_TOKEN='770',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
+  const APP_BUILD='7.74',APP_BUILD_TOKEN='774',IS_GITHUB_PAGES=/(^|\.)github\.io$/i.test(location.hostname);
   const PAGE_FILES={dashboard:'dashboard.html',cashier:'cashier.html',sales:'sales.html',purchases:'purchases.html',debts:'debts.html',installments:'installments.html',products:'products.html',stock:'stock.html',units:'units.html',transfers:'transfers.html',barcodes:'barcodes.html',accounts:'accounts.html',vouchers:'vouchers.html',cheques:'cheques.html',journals:'journals.html',expenses:'expenses.html',reports:'reports.html',customers:'customers.html','customer-groups':'customer-groups.html','price-groups':'price-groups.html',suppliers:'suppliers.html',representatives:'representatives.html',messaging:'messaging.html',branches:'branches.html',warehouses:'warehouses.html',employees:'employees.html',audit:'audit.html',settings:'settings.html'};
   const PAGE_BY_FILE=Object.fromEntries(Object.entries(PAGE_FILES).map(([view,file])=>[file,view]));
   function entryPageView(){const explicit=String(window.ALMEZAN_PAGE_VIEW||'').trim();if(explicit&&PAGE_FILES[explicit])return explicit;const file=(location.pathname.split('/').pop()||'index.html').toLowerCase();return PAGE_BY_FILE[file]||'dashboard'}
@@ -52,6 +52,12 @@
     employees:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/><path d="M18 8h4M20 6v4"/>',
     reports:'<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>',
     settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.6h.4A1.7 1.7 0 0 0 4 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.4 4.1a1.7 1.7 0 0 0 1-.6A1.7 1.7 0 0 0 9.8 2H14v.4A1.7 1.7 0 0 0 15.1 4a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.5 8.4c.17.37.46.69.8.9.34.22.74.32 1.14.3H22v4h-.56a1.7 1.7 0 0 0-1.64 1.1z"/>',
+    image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/>',
+    text:'<path d="M4 6V4h16v2M9 20h6M12 4v16"/>',
+    device:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    shield:'<path d="M12 3 4 6v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6z"/><path d="m9 12 2 2 4-4"/>',
+    key:'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l2 2M14 9l2 2"/>',
+    building:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M10 21v-3h4v3"/>',
     branch:'<path d="M3 21h18M5 21V5h14v16M9 9h2M13 9h2M9 13h2M13 13h2M10 21v-4h4v4"/>',
     warehouse:'<path d="m3 9 9-6 9 6v12H3zM3 9h18M7 13h10M7 17h10"/>',
     barcode:'<path d="M3 5v14M7 5v14M10 5v14M15 5v14M18 5v14M21 5v14"/>',
@@ -67,7 +73,7 @@
     camera:'<path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10H2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/>',focus:'<circle cx="12" cy="12" r="3"/><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',scan:'<path d="M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4M7 12h10"/>',
     save:'<path d="M4 3h14l2 2v16H4zM8 3v6h8V3M8 21v-8h8v8"/>',refresh:'<path d="M20 6v6h-6M4 18v-6h6M5 8a8 8 0 0 1 13-3l2 1M19 16a8 8 0 0 1-13 3l-2-1"/>',sync:'<path d="M21 12a9 9 0 0 0-15.219-6.219L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.219 6.219L21 16"/><path d="M16 16h5v5"/>',discount:'<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m15 9-6 6"/><path d="M9 9h.01"/><path d="M15 15h.01"/>',undo:'<path d="M9 14 4 9l5-5"/><path d="M20 20a8 8 0 0 0-8-8H4"/>',
     calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
-    card:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',calculator:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h1M12 11h1M16 11h1M8 15h1M12 15h1M16 15h1M8 19h1M12 19h5"/>',chat:'<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',cash:'<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M7 9H5v2M17 15h2v-2"/>',
+    card:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',calculator:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h1M12 11h1M16 11h1M8 15h1M12 15h1M16 15h1M8 19h1M12 19h5"/>',mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>',chat:'<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',cash:'<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M7 9H5v2M17 15h2v-2"/>',
     bluetooth:'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
     wifi:'<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 20h.01"/>', 'wifi-off':'<path d="m3 3 18 18M8.5 16a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 6-2.4M15.6 10.7a10 10 0 0 1 3.4 1.8M12 20h.01"/>',
     moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -100,7 +106,7 @@
       {id:'ACC-1000',code:'1000',name:'الأصول',type:'asset',parentId:'',level:0},{id:'ACC-1100',code:'1100',name:'الصندوق والبنوك',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1110',code:'1110',name:'الصندوق الرئيسي',type:'asset',parentId:'ACC-1100',level:2},{id:'ACC-1120',code:'1120',name:'الحساب البنكي',type:'asset',parentId:'ACC-1100',level:2},{id:'ACC-1200',code:'1200',name:'ذمم العملاء',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1300',code:'1300',name:'المخزون',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-1400',code:'1400',name:'ضريبة القيمة المضافة المدخلة',type:'asset',parentId:'ACC-1000',level:1},{id:'ACC-2000',code:'2000',name:'الالتزامات',type:'liability',parentId:'',level:0},{id:'ACC-2100',code:'2100',name:'ذمم الموردين',type:'liability',parentId:'ACC-2000',level:1},{id:'ACC-2200',code:'2200',name:'ضريبة القيمة المضافة المستحقة',type:'liability',parentId:'ACC-2000',level:1},{id:'ACC-3000',code:'3000',name:'حقوق الملكية',type:'equity',parentId:'',level:0},{id:'ACC-3200',code:'3200',name:'الأرصدة الافتتاحية',type:'equity',parentId:'ACC-3000',level:1},{id:'ACC-4000',code:'4000',name:'الإيرادات',type:'revenue',parentId:'',level:0},{id:'ACC-4100',code:'4100',name:'إيرادات المبيعات',type:'revenue',parentId:'ACC-4000',level:1},{id:'ACC-4230',code:'4230',name:'أرباح تسوية المخزون',type:'revenue',parentId:'ACC-4000',level:1},{id:'ACC-5000',code:'5000',name:'المصروفات',type:'expense',parentId:'',level:0},{id:'ACC-5100',code:'5100',name:'تكلفة البضاعة المباعة',type:'expense',parentId:'ACC-5000',level:1},{id:'ACC-5200',code:'5200',name:'المصروفات التشغيلية',type:'expense',parentId:'ACC-5000',level:1},{id:'ACC-5230',code:'5230',name:'خسائر وتسويات المخزون',type:'expense',parentId:'ACC-5000',level:1}
     ]};
   }
-  const NEWEST_FIRST_DATASETS=new Set(['sales','purchases','transfers','transferRequests','vouchers','cheques','finance','journals','expenses','revenues','employees','customers','suppliers','representatives' ,'products','audit','shifts','shiftLogs','notifications','heldOrders','installmentContracts','projects','payrollRuns']);
+  const NEWEST_FIRST_DATASETS=new Set(['sales','purchases','transfers','transferRequests','vouchers','cheques','finance','journals','expenses','revenues','employees','customers','suppliers','representatives' ,'products','audit','shifts','shiftLogs','notifications','heldOrders','installmentContracts','projects','payrollRuns','workers','attendance','employeeLoans','payrollAdjustments','payrollSheets','payrollPayments']);
   function recordTimeValue(x){
     if(!x||typeof x!=='object')return 0;
     const raw=x.updatedAt||x.createdAt||x.closedAt||x.openedAt||x.date||x.issueDate||x.dueDate||'';
@@ -774,7 +780,7 @@ function enhanceSelects(root=document){
     if(invoicePrintLock.id===id&&at-invoicePrintLock.at<1800){try{invoicePrintWindow?.focus?.()}catch(_){}return true}
     invoicePrintLock={id,at};
     const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,7)}`;
-    const url=`./index.html?v=770&printToken=${encodeURIComponent(token)}#print-invoice/${encodeURIComponent(id)}`;
+    const url=`./index.html?v=771&printToken=${encodeURIComponent(token)}#print-invoice/${encodeURIComponent(id)}`;
     try{
       if(invoicePrintWindow&&!invoicePrintWindow.closed){invoicePrintWindow.location.replace(url);invoicePrintWindow.focus();return true}
       invoicePrintWindow=window.open(url,'almezanInvoicePrint');
