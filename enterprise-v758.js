@@ -108,9 +108,9 @@
   function safePrintInvoice758(id){
     id=String(id||'').trim();const sale=D().sales?.find(x=>String(x.id)===id);if(!sale)return A.toast('الفاتورة غير موجودة.','error');
     const at=Date.now();if(printLock.id===id&&at-printLock.at<1800){try{printWindow?.focus?.()}catch(_){}return true}printLock={id,at};
-    const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,8)}`,key=`almezan_print_job_v758_${token}`,size=D().settings?.printSize==='58'?'58':D().settings?.printSize==='a4'?'a4':'80',offsetMm=size==='58'?num(D().settings?.printOffset58??0):size==='80'?num(D().settings?.printOffset80??0):0;
+    const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,8)}`,key=`almezan_print_job_v758_${token}`,size=D().settings?.printSize==='58'?'58':D().settings?.printSize==='a4'?'a4':'80',offsetMm=0;
     try{localStorage.setItem(key,JSON.stringify({html:receiptHtml758(sale),size,offsetMm,number:sale.number,createdAt:at}))}catch(e){return A.toast('تعذر تجهيز الفاتورة للطباعة.','error')}
-    const url=`./print-invoice.html?v=770&token=${encodeURIComponent(token)}`;
+    const url=`./print-invoice.html?v=778&token=${encodeURIComponent(token)}`;
     try{
       if(printWindow&&!printWindow.closed){printWindow.location.replace(url);printWindow.focus();return true}
       printWindow=window.open(url,'almezanInvoicePrint');if(printWindow){printWindow.focus();return true}

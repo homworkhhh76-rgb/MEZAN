@@ -1850,3 +1850,16 @@ html.coarse-ui .cashier-utility-strip .cashier-voice-button{display:grid!importa
 @keyframes voiceBar776{0%,100%{height:5px}35%{height:17px}65%{height:9px}}
 .cashier-voice-button.listening .voice-wave i{height:6px!important;animation:voiceBar776 .72s ease-in-out infinite}
 .cashier-voice-button.listening .voice-wave i:nth-child(2){animation-delay:.11s}.cashier-voice-button.listening .voice-wave i:nth-child(3){animation-delay:.22s}.cashier-voice-button.listening .voice-wave i:nth-child(4){animation-delay:.33s}
+
+
+/* ===== v7.78 iPad orientation + centered browser printing support ===== */
+html.ipad-portrait-mobile .mobile-bottom-nav{display:flex!important}
+html.ipad-portrait-mobile .menu-button{display:grid!important}
+html.ipad-portrait-mobile .sidebar{transform:translateX(105%)!important;width:min(84vw,300px)!important;max-width:300px!important}
+html.ipad-portrait-mobile .sidebar.open{transform:translateX(0)!important}
+html.ipad-portrait-mobile .content-shell{margin-right:0!important;width:100%!important;max-width:100%!important;padding-bottom:68px!important}
+html.ipad-portrait-mobile .workspace{padding:12px!important}
+html.ipad-portrait-mobile .modern-pos .cashier-layout{grid-template-columns:1fr!important}
+html.ipad-portrait-mobile .cashier-mobile-split-tabs{display:flex!important}
+html.ipad-portrait-mobile .cashier-layout:not(.show-invoice) .cart-panel{display:none!important}
+html.ipad-portrait-mobile .cashier-layout.show-invoice .products-pane{display:none!important}

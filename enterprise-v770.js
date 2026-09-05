@@ -62,6 +62,6 @@ const baseStockView=S.views.stock;A.registerView('stock',root=>{const rep=curren
 const style=document.createElement('style');style.textContent=`
 .rep-stock-svg svg{width:18px;height:18px}.v770-stock-line{display:grid;grid-template-columns:minmax(210px,1.1fr) minmax(320px,2fr) 42px;gap:10px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}.v770-unit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px}.v770-unit-field{display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--muted)}.v770-unit-field input{width:100%;min-height:38px}@media(max-width:760px){.v770-stock-line{grid-template-columns:1fr}.v770-stock-line>.icon-button{justify-self:start}.v770-unit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 `;document.head.appendChild(style);
-if(num(D().settings.printCenterCalibrationVersion)<770){D().settings.printOffset58=0;D().settings.printOffset80=0;D().settings.printCenterCalibrationVersion=770}
+if(num(D().settings.printCenterCalibrationVersion)<778){D().settings.printOffset58=0;D().settings.printOffset80=0;D().settings.printCenterCalibrationVersion=778}
 D().settings.enterpriseSchemaVersion=770;D().sequences.repStockMove=num(D().sequences.repStockMove);A.saveDB(true);
 })();
