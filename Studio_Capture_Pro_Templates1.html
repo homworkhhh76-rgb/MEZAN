@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Studio Capture Fixed Mode</title>
+<style>
+  :root{
+    --bg:#071019;
+    --panel:#0d1521;
+    --panel2:#101b2a;
+    --line:#24364d;
+    --text:#f8fafc;
+    --muted:#8ea0b7;
+    --green:#10b981;
+    --green2:#059669;
+    --blue:#2563eb;
+    --amber:#d97706;
+    --red:#dc2626;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    min-height:100vh;
+    color:var(--text);
+    font-family:Arial, Tahoma, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 540px at 90% -10%, rgba(16,185,129,.14), transparent 60%),
+      radial-gradient(800px 500px at -10% 5%, rgba(37,99,235,.12), transparent 60%),
+      var(--bg);
+  }
+  body.lock-scroll{overflow:hidden}
+  button,input,select{font:inherit}
+  .app{max-width:1580px;margin:auto;padding:16px}
+  .topbar{
+    position:sticky;top:10px;z-index:15;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 16px;border-radius:22px;border:1px solid var(--line);
+    background:rgba(13,21,33,.92);backdrop-filter:blur(14px);
+    box-shadow:0 20px 48px rgba(0,0,0,.28)
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{
+    width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--green),var(--green2));
+    box-shadow:0 12px 28px rgba(16,185,129,.25)
+  }
+  .logo svg{width:25px;height:25px}
+  .brand h1{margin:0 0 4px;font-size:18px}
+  .brand p{margin:0;font-size:12px;color:var(--muted)}
+  .statusWrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .status{
+    display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:#64748b;box-shadow:0 0 0 4px rgba(100,116,139,.14)}
+  .dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(16,185,129,.14)}
+  .dot.rec{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.16);animation:pulse 1s infinite}
+  .pill{
+    border:1px solid #2b405c;background:#142132;color:#dce6f1;border-radius:999px;
+    padding:7px 10px;font-size:12px
+  }
+  .rec-pill{
+    display:none;align-items:center;gap:8px;
+    padding:8px 11px;border-radius:999px;border:1px solid rgba(239,68,68,.24);
+    background:rgba(239,68,68,.12);color:#fff;font-size:12px
+  }
+  .rec-pill.show{display:flex}
+  .rec-pill i{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1s infinite}
+  .timer{direction:ltr;font-variant-numeric:tabular-nums}
+  @keyframes pulse{50%{transform:scale(.72);opacity:.68}}
+
+  .notice{
+    margin-top:14px;padding:13px 15px;border-radius:16px;border:1px solid #3e4f16;
+    background:linear-gradient(180deg,rgba(245,158,11,.18),rgba(217,119,6,.12));
+    color:#fff7db;line-height:1.8;font-size:13px
+  }
+  .notice strong{color:#fff}
+  .notice.success{
+    border-color:rgba(16,185,129,.3);
+    background:linear-gradient(180deg,rgba(16,185,129,.16),rgba(5,150,105,.10));
+    color:#eafff6
+  }
+
+  .layout{
+    display:grid;
+    grid-template-columns:430px minmax(0,1fr);
+    gap:18px;margin-top:18px
+  }
+  .panel{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:rgba(13,21,33,.92);box-shadow:0 22px 60px rgba(0,0,0,.24)
+  }
+  .controls{padding:15px;position:sticky;top:98px;align-self:start}
+  .section{padding:14px 0;border-bottom:1px solid var(--line)}
+  .section:first-child{padding-top:0}
+  .section:last-child{border-bottom:0;padding-bottom:0}
+  .section h3{margin:0 0 12px;font-size:14px}
+  .label{display:block;font-size:12px;color:var(--muted);margin:0 0 7px}
+  .field,.select{
+    width:100%;padding:11px 13px;border-radius:12px;border:1px solid #2b405c;background:#09111b;color:#fff;outline:none
+  }
+  .field:focus,.select:focus{border-color:rgba(16,185,129,.8);box-shadow:0 0 0 3px rgba(16,185,129,.1)}
+  .row{display:grid;gap:9px}
+  .two{grid-template-columns:1fr 1fr}
+  .three{grid-template-columns:repeat(3,1fr)}
+  .btn{
+    border:0;border-radius:12px;padding:11px 12px;cursor:pointer;font-weight:700;min-height:43px;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.18s
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .btn.primary{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff}
+  .btn.dark{background:#162335;color:#eef4fb;border:1px solid #2b405c}
+  .btn.blue{background:linear-gradient(135deg,#4f8cf7,var(--blue));color:#fff}
+  .btn.red{background:linear-gradient(135deg,#ef4444,var(--red));color:#fff}
+  .btn.amber{background:linear-gradient(135deg,#f6b34a,var(--amber));color:#111827}
+  .btn svg{width:17px;height:17px}
+  .hint{font-size:11px;color:#7d90a7;line-height:1.72;margin-top:8px}
+
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .card-btn{
+    border:1px solid #2b405c;background:#0a111a;color:#fff;border-radius:14px;padding:12px;text-align:right;cursor:pointer;transition:.18s
+  }
+  .card-btn:hover{transform:translateY(-1px)}
+  .card-btn.active{border-color:var(--green);background:rgba(16,185,129,.08);box-shadow:0 0 0 2px rgba(16,185,129,.08) inset}
+  .card-btn strong{display:block;font-size:13px;margin-bottom:4px}
+  .card-btn span{font-size:11px;color:var(--muted)}
+
+  .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+  .chip{
+    border:1px solid #2b405c;background:#09111b;color:#cbd5e1;border-radius:11px;padding:10px 6px;
+    font-size:12px;text-align:center;cursor:pointer
+  }
+  .chip.active{border-color:var(--green);background:rgba(16,185,129,.12);color:#fff}
+
+  .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+  .switch{position:relative;width:46px;height:25px;flex:none}
+  .switch input{display:none}
+  .slider{position:absolute;inset:0;background:#2a3d58;border-radius:999px;cursor:pointer;transition:.2s}
+  .slider:after{content:"";position:absolute;top:3px;right:3px;width:19px;height:19px;background:#fff;border-radius:50%;transition:.2s}
+  .switch input:checked + .slider{background:var(--green2)}
+  .switch input:checked + .slider:after{transform:translateX(-21px)}
+
+  .workspace{padding:14px}
+  .workspace-head{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 12px
+  }
+  .workspace-head h2{margin:0;font-size:15px}
+  .tiny{font-size:11px;color:var(--muted)}
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;border:1px solid #2b405c;
+    background:#132030;color:#c9d4df;border-radius:999px;padding:6px 10px;font-size:11px
+  }
+
+  .stage{
+    min-height:820px;border-radius:18px;padding:18px;border:1px solid #203049;
+    background:
+      linear-gradient(45deg,#0a111a 25%,transparent 25%),
+      linear-gradient(-45deg,#0a111a 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#0a111a 75%),
+      linear-gradient(-45deg,transparent 75%,#0a111a 75%),
+      #07101a;
+    background-size:28px 28px;background-position:0 0,0 14px,14px -14px,-14px 0;
+    display:flex;align-items:center;justify-content:center;overflow:auto;position:relative
+  }
+  .viewer{
+    position:relative;transform-origin:center center;transition:transform .2s ease
+  }
+  .shell{position:relative;margin:auto}
+  .viewport-box{position:relative;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+  .viewport-box iframe{display:block;border:0;background:#fff}
+  .blocked{
+    position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;background:#0b1016;color:#d2dae5;z-index:5
+  }
+  .blocked.show{display:grid}
+  .blocked strong{display:block;color:#fff;font-size:17px;margin-bottom:8px}
+
+  .shell.browser{border-radius:18px;overflow:hidden;background:#dfe5ee;box-shadow:0 24px 70px rgba(0,0,0,.34)}
+  .chrome-bar{
+    height:50px;border-bottom:1px solid #d7dde5;background:linear-gradient(#f7f8fa,#eceff4);
+    display:flex;align-items:center;gap:12px;padding:0 18px
+  }
+  .dots{display:flex;gap:7px}
+  .dots i{display:block;width:10px;height:10px;border-radius:50%;background:#d2d7de}
+  .browser-url{
+    flex:1;height:34px;border-radius:999px;border:1px solid #d6dce5;background:#fff;
+    display:flex;align-items:center;padding:0 14px;color:#778194;font-size:13px;direction:ltr;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+
+  .shell.monitor{padding:18px 18px 0;border-radius:18px;background:#11161d;box-shadow:0 28px 80px rgba(0,0,0,.44)}
+  .shell.monitor .viewport-box{border-radius:10px}
+  .monitor-stand{width:18%;height:24px;background:linear-gradient(#9299a4,#707784);margin:0 auto;border-radius:0 0 12px 12px}
+  .monitor-base{width:44%;height:14px;background:linear-gradient(#b6bcc6,#7c838e);margin:8px auto 0;border-radius:999px}
+
+  .shell.laptop{padding:16px 16px 0}
+  .laptop-top{padding:14px;background:#11151b;border-radius:22px 22px 12px 12px;box-shadow:0 28px 90px rgba(0,0,0,.45);position:relative}
+  .laptop-top .cam{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:7px;height:7px;border-radius:50%;background:#2f3742}
+  .shell.laptop .viewport-box{border-radius:18px}
+  .laptop-base{
+    width:112%;margin-right:-6%;height:24px;background:linear-gradient(#c9ced6,#8d949f);
+    border-radius:3px 3px 18px 18px;box-shadow:0 12px 24px rgba(0,0,0,.35);position:relative
+  }
+  .laptop-base:before{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);top:0;width:13%;height:7px;background:#aab0ba;border-radius:0 0 8px 8px
+  }
+
+  .shell.tablet{padding:18px;background:#141922;border-radius:28px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+  .tablet-notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:58px;height:6px;border-radius:999px;background:#2d3440}
+  .shell.tablet .viewport-box{border-radius:20px}
+
+  .shell.mobile{padding:16px;background:#10151d;border-radius:32px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+  .mobile-notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:34%;height:22px;border-radius:0 0 18px 18px;background:#0b0f15;z-index:4}
+  .shell.mobile .viewport-box{border-radius:24px}
+
+  .capture-box{display:none;margin-top:14px;border:1px solid #2b405c;border-radius:14px;overflow:hidden;background:#060a10}
+  .capture-box.show{display:block}
+  .capture-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#0d131b}
+  .capture-box video{width:100%;max-height:520px;display:block;background:#000}
+
+  .info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .info{
+    border:1px solid #2b405c;background:#101827;border-radius:12px;padding:10px 12px;font-size:12px;color:#dde5ef
+  }
+  .info small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+
+  .toast{
+    position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);
+    background:#111827;color:#fff;padding:11px 14px;border-radius:12px;border:1px solid #2a3f5b;
+    opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 15px 50px rgba(0,0,0,.35)
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* Fixed presentation overlay */
+  .overlay{
+    position:fixed;inset:0;background:rgba(2,6,12,.94);backdrop-filter:blur(6px);
+    z-index:50;display:none;align-items:center;justify-content:center;padding:14px
+  }
+  .overlay.show{display:flex}
+  .overlay-inner{
+    position:relative;width:100%;height:100%;
+    display:flex;align-items:center;justify-content:center;overflow:hidden
+  }
+  .overlay-viewer{
+    transform-origin:center center;transition:transform .2s ease
+  }
+  .overlay-toolbar{
+    position:absolute;top:10px;left:10px;right:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;z-index:52
+  }
+  .overlay-group{display:flex;gap:8px;flex-wrap:wrap}
+  .overlay-note{
+    font-size:12px;color:#d3dcea;background:rgba(12,19,29,.75);border:1px solid #2b405c;border-radius:999px;padding:8px 12px
+  }
+  .overlay .btn{min-height:40px}
+  .overlay-capture{
+    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px;flex-wrap:wrap;z-index:52
+  }
+
+  @media (max-width:1100px){
+    .layout{grid-template-columns:1fr}
+    .controls{position:static}
+    .stage{min-height:620px}
+  }
+  @media (max-width:640px){
+    .app{padding:10px}
+    .topbar{padding:12px}
+    .brand p{display:none}
+    .chips{grid-template-columns:repeat(2,1fr)}
+    .cards{grid-template-columns:1fr}
+    .two,.three{grid-template-columns:1fr}
+    .stage{padding:10px;min-height:420px}
+    .info-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="12" rx="2"/>
+          <path d="M8 20h8M12 16v4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Studio Capture Fixed</h1>
+        <p>معاينة لابتوب ثابتة + قوالب مقاس + وضع تصوير ثابت داخل إطار الشاشة</p>
+      </div>
+    </div>
+    <div class="statusWrap">
+      <div class="rec-pill" id="recPill"><i></i><span>REC</span><strong class="timer" id="timer">00:00:00</strong></div>
+      <div class="pill" id="contextPill">Checking…</div>
+      <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">جاهز</span></div>
+    </div>
+  </header>
+
+  <div class="notice" id="compatNotice">
+    جاري فحص بيئة التشغيل...
+  </div>
+
+  <main class="layout">
+    <aside class="panel controls">
+      <div class="section">
+        <h3>1) رابط الموقع</h3>
+        <label class="label" for="siteUrl">أدخل رابط الموقع</label>
+        <div class="row two">
+          <input id="siteUrl" class="field" value="https://example.com" placeholder="https://example.com" />
+          <button class="btn primary" id="loadSite">تحميل</button>
+        </div>
+        <div class="row two" style="margin-top:9px">
+          <button class="btn dark" id="reloadFrame">تحديث</button>
+          <button class="btn dark" id="openTab">فتح بنافذة</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>2) قالب الشاشة</h3>
+        <div class="cards" id="deviceCards">
+          <button class="card-btn active" data-device="laptop"><strong>لابتوب</strong><span>أفضل قالب لمعاينة مواقع سطح المكتب</span></button>
+          <button class="card-btn" data-device="monitor"><strong>شاشة مكتبية</strong><span>Monitor مع حامل</span></button>
+          <button class="card-btn" data-device="browser"><strong>نافذة متصفح</strong><span>بدون جهاز، إطار Browser فقط</span></button>
+          <button class="card-btn" data-device="tablet"><strong>تابلت</strong><span>معاينة متوسطة</span></button>
+          <button class="card-btn" data-device="mobile"><strong>جوال</strong><span>عرض Mobile داخل هاتف</span></button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>3) قوالب المقاسات الجاهزة</h3>
+        <div class="chips" id="presetChips">
+          <button class="chip active" data-w="1440" data-h="900">MacBook 1440×900</button>
+          <button class="chip" data-w="1366" data-h="768">Laptop 1366×768</button>
+          <button class="chip" data-w="1920" data-h="1080">Desktop 1920×1080</button>
+          <button class="chip" data-w="1280" data-h="720">HD 1280×720</button>
+          <button class="chip" data-w="1024" data-h="1366">Tablet 1024×1366</button>
+          <button class="chip" data-w="390" data-h="844">Mobile 390×844</button>
+        </div>
+        <div class="hint">إذا تريد شكل لابتوب واضح حتى من الجوال اختَر «لابتوب» + «1440×900» أو «1366×768».</div>
+      </div>
+
+      <div class="section">
+        <h3>4) تحديد المقاس يدويًا</h3>
+        <div class="row three">
+          <div>
+            <label class="label" for="customW">العرض</label>
+            <input id="customW" class="field" type="number" min="200" step="1" value="1440">
+          </div>
+          <div>
+            <label class="label" for="customH">الارتفاع</label>
+            <input id="customH" class="field" type="number" min="200" step="1" value="900">
+          </div>
+          <div style="display:flex;align-items:end">
+            <button class="btn primary" id="applySize" style="width:100%">تطبيق</button>
+          </div>
+        </div>
+        <div class="row two" style="margin-top:9px">
+          <button class="btn dark" id="swapWH">تبديل أفقي/عمودي</button>
+          <button class="btn dark" id="fitStage">إعادة ملاءمة</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>5) وضع التصوير الثابت</h3>
+        <div class="row">
+          <button class="btn primary" id="openFixedMode">فتح وضع التصوير الثابت</button>
+          <button class="btn dark" id="fullscreenBtn">ملء الشاشة</button>
+        </div>
+        <div class="hint">هذا الوضع يثبت الإطار في المنتصف ويمنع تمرير الصفحة. مناسب جدًا إذا أردت استخدام مسجل شاشة الجوال نفسه بدل التسجيل من داخل المتصفح.</div>
+      </div>
+
+      <div class="section">
+        <h3>6) التسجيل الداخلي من المتصفح</h3>
+        <div class="chips" id="qualityChips">
+          <button class="chip" data-q="720">HD 720</button>
+          <button class="chip active" data-q="1080">FHD 1080</button>
+          <button class="chip" data-q="2160">4K</button>
+        </div>
+        <div style="height:10px"></div>
+        <label class="label" for="fps">معدل الإطارات</label>
+        <select id="fps" class="select">
+          <option value="30">30 FPS</option>
+          <option value="60" selected>60 FPS</option>
+        </select>
+
+        <div class="toggle">
+          <div><div style="font-size:12px">صوت النظام</div><div class="tiny">إن كان مدعومًا</div></div>
+          <label class="switch"><input type="checkbox" id="systemAudio" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <div><div style="font-size:12px">الميكروفون</div><div class="tiny">للتعليق أثناء التسجيل</div></div>
+          <label class="switch"><input type="checkbox" id="micAudio"><span class="slider"></span></label>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button class="btn blue" id="pickScreen">اختيار الشاشة / التبويب</button>
+          <div class="row two">
+            <button class="btn red" id="startRec" disabled>بدء التسجيل</button>
+            <button class="btn dark" id="stopRec" disabled>إيقاف</button>
+          </div>
+          <button class="btn amber" id="shotBtn" disabled>لقطة شاشة PNG</button>
+        </div>
+        <div class="hint">
+          إن كنت فاتح الملف من <b>content://</b> أو <b>file://</b> فكروم سيمنع هذه الميزة. في هذه الحالة استخدم «وضع التصوير الثابت» ثم مسجل الشاشة المدمج في هاتفك.
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>7) معلومات الحالة</h3>
+        <div class="info-grid">
+          <div class="info" id="viewportInfo">Viewport: 1440 × 900<small>المساحة الداخلية للموقع</small></div>
+          <div class="info" id="deviceInfo">Device: لابتوب<small>القالب الحالي</small></div>
+          <div class="info" id="scaleInfo">Scale: —<small>نسبة التصغير</small></div>
+          <div class="info" id="captureInfo">Capture: —<small>معلومات التسجيل الداخلي</small></div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="panel workspace">
+      <div class="workspace-head">
+        <div>
+          <h2>المعاينة الذكية</h2>
+          <div class="tiny">الموقع يُعرض داخليًا بمقاس Desktop حقيقي ثم يُصغَّر بصريًا داخل إطار شاشة جاهز.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="badge" id="badgeDevice">Laptop</span>
+          <span class="badge" id="badgeSize">1440 × 900</span>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="viewer" id="viewer"></div>
+      </div>
+
+      <div class="capture-box" id="captureBox">
+        <div class="capture-head">
+          <span>مصدر الالتقاط المختار</span>
+          <span class="badge">LIVE CAPTURE</span>
+        </div>
+        <video id="captureVideo" autoplay muted playsinline></video>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Fixed studio overlay -->
+<div class="overlay" id="fixedOverlay">
+  <div class="overlay-toolbar">
+    <div class="overlay-group">
+      <button class="btn dark" id="exitFixedMode">إغلاق الوضع الثابت</button>
+      <button class="btn dark" id="overlayFit">ملاءمة</button>
+      <button class="btn dark" id="overlayZoomIn">تكبير +</button>
+      <button class="btn dark" id="overlayZoomOut">تصغير -</button>
+    </div>
+    <div class="overlay-note">هذا الوضع ثابت ومناسب للتصوير بمسجل شاشة الهاتف</div>
+    <div class="overlay-group">
+      <button class="btn primary" id="overlayFullscreen">Fullscreen</button>
+    </div>
+  </div>
+  <div class="overlay-inner" id="overlayInner">
+    <div class="overlay-viewer" id="overlayViewer"></div>
+  </div>
+  <div class="overlay-capture">
+    <button class="btn blue" id="overlayPickScreen">اختيار الشاشة</button>
+    <button class="btn red" id="overlayStartRec" disabled>بدء التسجيل</button>
+    <button class="btn dark" id="overlayStopRec" disabled>إيقاف</button>
+    <button class="btn amber" id="overlayShotBtn" disabled>لقطة PNG</button>
+  </div>
+</div>
+
+<canvas id="shotCanvas" style="display:none"></canvas>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+
+  const siteUrl = $('#siteUrl');
+  const viewer = $('#viewer');
+  const stage = $('#stage');
+  const overlay = $('#fixedOverlay');
+  const overlayViewer = $('#overlayViewer');
+  const overlayInner = $('#overlayInner');
+
+  const contextPill = $('#contextPill');
+  const compatNotice = $('#compatNotice');
+  const statusDot = $('#statusDot');
+  const statusText = $('#statusText');
+  const recPill = $('#recPill');
+  const timerEl = $('#timer');
+
+  const captureBox = $('#captureBox');
+  const captureVideo = $('#captureVideo');
+
+  let currentDevice = 'laptop';
+  let viewportW = 1440;
+  let viewportH = 900;
+  let quality = 1080;
+  let frameRef = null;
+  let overlayFrameRef = null;
+  let displayStream = null;
+  let micStream = null;
+  let recorder = null;
+  let chunks = [];
+  let timerInt = null;
+  let startedAt = 0;
+  let overlayScaleManual = 1;
+
+  const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.isSecureContext);
+  const scheme = location.protocol;
+
+  function toast(msg){
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  function setStatus(mode, text){
+    statusDot.className = 'dot' + (mode ? ' ' + mode : '');
+    statusText.textContent = text;
+  }
+
+  function normalizeUrl(v){
+    v = (v || '').trim();
+    if(!v) return 'https://example.com';
+    if(!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    return v;
+  }
+
+  function deviceLabel(name){
+    return ({
+      laptop:'لابتوب',
+      monitor:'شاشة مكتبية',
+      browser:'نافذة متصفح',
+      tablet:'تابلت',
+      mobile:'جوال'
+    })[name] || name;
+  }
+
+  function initCompatibilityUI(){
+    if(canCapture){
+      contextPill.textContent = 'Secure Context';
+      compatNotice.className = 'notice success';
+      compatNotice.innerHTML = '<strong>جيد:</strong> هذه الصفحة تعمل داخل سياق آمن، ويمكن استخدام التسجيل الداخلي من المتصفح إذا سمح النظام بذلك.';
+    }else{
+      contextPill.textContent = scheme.replace(':','') + ' context';
+      compatNotice.className = 'notice';
+      compatNotice.innerHTML = '<strong>سبب المشكلة:</strong> أنت فتحت الملف من <b>' + scheme + '</b> وليس من <b>https://</b> أو <b>localhost</b>. لذلك حتى لو كنت تستخدم كروم، المتصفح يمنع <b>Screen Capture API</b> من داخل الصفحة. <br>الحل: ارفع الملف على GitHub Pages أو افتحه من سيرفر محلي، أو استخدم <b>وضع التصوير الثابت</b> ثم مسجل الشاشة المدمج في الهاتف.';
+    }
+
+    if(!canCapture){
+      $('#pickScreen').disabled = true;
+      $('#startRec').disabled = true;
+      $('#stopRec').disabled = true;
+      $('#shotBtn').disabled = true;
+
+      $('#overlayPickScreen').disabled = true;
+      $('#overlayStartRec').disabled = true;
+      $('#overlayStopRec').disabled = true;
+      $('#overlayShotBtn').disabled = true;
+    }
+  }
+
+  function createShell(device, w, h, url){
+    const src = url || 'https://example.com';
+    const blocked = `<div class="blocked" id="blockedMsg"><div><strong>تعذر عرض الموقع داخل الإطار</strong>بعض المواقع تمنع iframe. افتح الموقع بنافذة منفصلة أو استخدم موقعك المنشور المباشر.</div></div>`;
+
+    if(device === 'browser'){
+      return `
+        <div class="shell browser" id="shell">
+          <div class="chrome-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="browser-url">${src}</div>
+          </div>
+          <div class="viewport-box" style="width:${w}px;height:${h}px">
+            <iframe id="siteFrame" src="${src}" style="width:${w}px;height:${h}px"></iframe>
+            ${blocked}
+          </div>
+        </div>
+      `;
+    }
+
+    if(device === 'monitor'){
+      return `
+        <div class="shell monitor" id="shell">
+          <div class="viewport-box" style="width:${w}px;height:${h}px">
+            <iframe id="siteFrame" src="${src}" style="width:${w}px;height:${h}px"></iframe>
+            ${blocked}
+          </div>
+          <div class="monitor-stand"></div>
+          <div class="monitor-base"></div>
+        </div>
+      `;
+    }
+
+    if(device === 'tablet'){
+      return `
+        <div class="shell tablet" id="shell">
+          <div class="tablet-notch"></div>
+          <div class="viewport-box" style="width:${w}px;height:${h}px">
+            <iframe id="siteFrame" src="${src}" style="width:${w}px;height:${h}px"></iframe>
+            ${blocked}
+          </div>
+        </div>
+      `;
+    }
+
+    if(device === 'mobile'){
+      return `
+        <div class="shell mobile" id="shell">
+          <div class="mobile-notch"></div>
+          <div class="viewport-box" style="width:${w}px;height:${h}px">
+            <iframe id="siteFrame" src="${src}" style="width:${w}px;height:${h}px"></iframe>
+            ${blocked}
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="shell laptop" id="shell">
+        <div class="laptop-top">
+          <div class="cam"></div>
+          <div class="viewport-box" style="width:${w}px;height:${h}px">
+            <iframe id="siteFrame" src="${src}" style="width:${w}px;height:${h}px"></iframe>
+            ${blocked}
+          </div>
+        </div>
+        <div class="laptop-base"></div>
+      </div>
+    `;
+  }
+
+  function renderMainViewer(){
+    const url = normalizeUrl(siteUrl.value);
+    siteUrl.value = url;
+    viewer.innerHTML = createShell(currentDevice, viewportW, viewportH, url);
+    frameRef = viewer.querySelector('#siteFrame');
+    fitViewer();
+    updateInfo();
+  }
+
+  function fitViewer(){
+    const shell = viewer.querySelector('#shell');
+    if(!shell) return;
+    viewer.style.transform = 'scale(1)';
+    const stageRect = stage.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const scale = Math.min((stageRect.width - 30) / shellRect.width, (stageRect.height - 30) / shellRect.height, 1);
+    viewer.style.transform = `scale(${scale})`;
+    $('#scaleInfo').innerHTML = `Scale: ${scale.toFixed(2)}x<small>نسبة التصغير</small>`;
+  }
+
+  function renderOverlayViewer(){
+    const url = normalizeUrl(siteUrl.value);
+    overlayViewer.innerHTML = createShell(currentDevice, viewportW, viewportH, url);
+    overlayFrameRef = overlayViewer.querySelector('#siteFrame');
+    fitOverlayViewer(true);
+  }
+
+  function fitOverlayViewer(resetScale=false){
+    const shell = overlayViewer.querySelector('#shell');
+    if(!shell) return;
+    if(resetScale) overlayScaleManual = 1;
+    overlayViewer.style.transform = 'scale(1)';
+    const rect = overlayInner.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const autoScale = Math.min((rect.width - 30) / shellRect.width, (rect.height - 30) / shellRect.height, 1);
+    const finalScale = autoScale * overlayScaleManual;
+    overlayViewer.style.transform = `scale(${finalScale})`;
+  }
+
+  function updateInfo(){
+    $('#viewportInfo').innerHTML = `Viewport: ${viewportW} × ${viewportH}<small>المساحة الداخلية للموقع</small>`;
+    $('#deviceInfo').innerHTML = `Device: ${deviceLabel(currentDevice)}<small>القالب الحالي</small>`;
+    $('#badgeDevice').textContent = deviceLabel(currentDevice);
+    $('#badgeSize').textContent = `${viewportW} × ${viewportH}`;
+    $('#customW').value = viewportW;
+    $('#customH').value = viewportH;
+  }
+
+  function activateDevice(btn){
+    document.querySelectorAll('#deviceCards .card-btn').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function activatePreset(btn){
+    document.querySelectorAll('#presetChips .chip').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function setDevice(device){
+    currentDevice = device;
+    const b = document.querySelector(`#deviceCards .card-btn[data-device="${device}"]`);
+    if(b) activateDevice(b);
+
+    if(device === 'mobile' && viewportW > 650){ viewportW = 390; viewportH = 844; }
+    if(device === 'tablet' && viewportW < 700){ viewportW = 1024; viewportH = 1366; }
+    if((device === 'laptop' || device === 'monitor' || device === 'browser') && viewportW < 900){
+      viewportW = 1440; viewportH = 900;
+    }
+    renderMainViewer();
+  }
+
+  function applySize(w,h){
+    viewportW = Math.max(200, parseInt(w || 0, 10) || 1440);
+    viewportH = Math.max(200, parseInt(h || 0, 10) || 900);
+    renderMainViewer();
+  }
+
+  // Main controls
+  $('#loadSite').onclick = () => renderMainViewer();
+  $('#reloadFrame').onclick = () => {
+    try{ if(frameRef) frameRef.src = frameRef.src; }catch(e){}
+    toast('تم تحديث المعاينة');
+  };
+  $('#openTab').onclick = () => window.open(normalizeUrl(siteUrl.value), '_blank', 'noopener,noreferrer');
+  siteUrl.addEventListener('keydown', e => { if(e.key === 'Enter') renderMainViewer(); });
+
+  $('#deviceCards').addEventListener('click', e => {
+    const btn = e.target.closest('.card-btn');
+    if(!btn) return;
+    setDevice(btn.dataset.device);
+  });
+
+  $('#presetChips').addEventListener('click', e => {
+    const btn = e.target.closest('.chip');
+    if(!btn) return;
+    activatePreset(btn);
+    viewportW = parseInt(btn.dataset.w, 10);
+    viewportH = parseInt(btn.dataset.h, 10);
+    if(viewportW <= 500) setDevice('mobile');
+    else if(viewportW <= 1100 && viewportH >= 1200) setDevice('tablet');
+    else setDevice('laptop');
+    renderMainViewer();
+  });
+
+  $('#applySize').onclick = () => applySize($('#customW').value, $('#customH').value);
+  $('#swapWH').onclick = () => {
+    const t = viewportW; viewportW = viewportH; viewportH = t;
+    renderMainViewer();
+  };
+  $('#fitStage').onclick = () => fitViewer();
+
+  // Fixed presentation mode
+  $('#openFixedMode').onclick = () => {
+    renderOverlayViewer();
+    overlay.classList.add('show');
+    document.body.classList.add('lock-scroll');
+    fitOverlayViewer(true);
+    toast('تم فتح وضع التصوير الثابت');
+  };
+  $('#exitFixedMode').onclick = () => {
+    overlay.classList.remove('show');
+    document.body.classList.remove('lock-scroll');
+  };
+  $('#overlayFit').onclick = () => fitOverlayViewer(true);
+  $('#overlayZoomIn').onclick = () => { overlayScaleManual += 0.08; fitOverlayViewer(false); };
+  $('#overlayZoomOut').onclick = () => { overlayScaleManual = Math.max(0.3, overlayScaleManual - 0.08); fitOverlayViewer(false); };
+
+  async function requestFullscreen(el){
+    try{
+      if(el.requestFullscreen) await el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    }catch(e){}
+  }
+
+  $('#fullscreenBtn').onclick = () => requestFullscreen(document.documentElement);
+  $('#overlayFullscreen').onclick = () => requestFullscreen(overlay);
+
+  // capture internals
+  function captureConstraints(){
+    const fps = parseInt($('#fps').value,10) || 60;
+    const map = {
+      720:{w:1280,h:720},
+      1080:{w:1920,h:1080},
+      2160:{w:3840,h:2160}
+    };
+    const d = map[quality] || map[1080];
+    return {
+      video:{width:{ideal:d.w,max:d.w}, height:{ideal:d.h,max:d.h}, frameRate:{ideal:fps,max:fps}},
+      audio:$('#systemAudio').checked
+    };
+  }
+
+  $('#qualityChips').addEventListener('click', e => {
+    const btn = e.target.closest('.chip');
+    if(!btn) return;
+    document.querySelectorAll('#qualityChips .chip').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    quality = parseInt(btn.dataset.q, 10);
+  });
+
+  async function stopStreams(resetStatus=true){
+    if(displayStream){ displayStream.getTracks().forEach(t => t.stop()); displayStream = null; }
+    if(micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    captureVideo.srcObject = null;
+    captureBox.classList.remove('show');
+    $('#startRec').disabled = !canCapture || !displayStream;
+    $('#stopRec').disabled = true;
+    $('#shotBtn').disabled = !canCapture || !displayStream;
+    $('#overlayStartRec').disabled = !canCapture || !displayStream;
+    $('#overlayStopRec').disabled = true;
+    $('#overlayShotBtn').disabled = !canCapture || !displayStream;
+    $('#captureInfo').innerHTML = 'Capture: —<small>معلومات التسجيل الداخلي</small>';
+    if(resetStatus) setStatus('', 'جاهز');
+  }
+
+  function bestMime(){
+    const types = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+    return types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  async function pickScreen(){
+    if(!canCapture){
+      toast('التسجيل الداخلي غير متاح في هذا السياق. استخدم وضع التصوير الثابت ومسجل الشاشة في الهاتف.');
+      return;
+    }
+    try{
+      if(displayStream) await stopStreams(false);
+      displayStream = await navigator.mediaDevices.getDisplayMedia(captureConstraints());
+      const vTrack = displayStream.getVideoTracks()[0];
+      captureVideo.srcObject = displayStream;
+      captureBox.classList.add('show');
+      $('#startRec').disabled = false;
+      $('#stopRec').disabled = true;
+      $('#shotBtn').disabled = false;
+      $('#overlayStartRec').disabled = false;
+      $('#overlayStopRec').disabled = true;
+      $('#overlayShotBtn').disabled = false;
+      setStatus('on', 'تم اختيار مصدر الالتقاط');
+
+      if(vTrack){
+        vTrack.onended = async () => {
+          if(recorder && recorder.state !== 'inactive') recorder.stop();
+          await stopStreams();
+        };
+      }
+
+      setTimeout(() => {
+        const s = vTrack && vTrack.getSettings ? vTrack.getSettings() : {};
+        const rw = s.width || captureVideo.videoWidth || '—';
+        const rh = s.height || captureVideo.videoHeight || '—';
+        const rf = Math.round(s.frameRate || 0) || '—';
+        $('#captureInfo').innerHTML = `Capture: ${rw} × ${rh} @ ${rf}fps<small>معلومات التسجيل الداخلي</small>`;
+      }, 500);
+
+      toast('اخترت الشاشة / التبويب بنجاح');
+    }catch(err){
+      console.error(err);
+      toast('تم إلغاء اختيار الشاشة أو تعذر الوصول');
+    }
+  }
+
+  async function getRecordingStream(){
+    const tracks = [];
+    displayStream.getVideoTracks().forEach(t => tracks.push(t));
+    displayStream.getAudioTracks().forEach(t => tracks.push(t));
+
+    if($('#micAudio').checked){
+      try{
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+          video:false
+        });
+        micStream.getAudioTracks().forEach(t => tracks.push(t));
+      }catch(e){
+        toast('تعذر الوصول للميكروفون، سيتم التسجيل بدونه');
+      }
+    }
+    return new MediaStream(tracks);
+  }
+
+  async function startRecording(){
+    if(!displayStream) return;
+    try{
+      const stream = await getRecordingStream();
+      const mime = bestMime();
+      const bitrate = quality === 2160 ? 32000000 : quality === 1080 ? 16000000 : 8000000;
+      recorder = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:bitrate} : {videoBitsPerSecond:bitrate});
+      chunks = [];
+      recorder.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        clearInterval(timerInt);
+        timerInt = null;
+        recPill.classList.remove('show');
+        const blob = new Blob(chunks, {type: recorder.mimeType || 'video/webm'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+        a.href = url;
+        a.download = `studio-capture-fixed-${stamp}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        if(micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+        $('#startRec').disabled = false;
+        $('#stopRec').disabled = true;
+        $('#overlayStartRec').disabled = false;
+        $('#overlayStopRec').disabled = true;
+        setStatus('on', 'تم حفظ التسجيل');
+        toast('تم حفظ الفيديو بنجاح');
+      };
+
+      recorder.start(1000);
+      startedAt = Date.now();
+      recPill.classList.add('show');
+      timerEl.textContent = '00:00:00';
+      timerInt = setInterval(() => {
+        const sec = Math.floor((Date.now() - startedAt) / 1000);
+        const h = String(Math.floor(sec/3600)).padStart(2,'0');
+        const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+        const s = String(sec%60).padStart(2,'0');
+        timerEl.textContent = `${h}:${m}:${s}`;
+      }, 250);
+
+      $('#startRec').disabled = true;
+      $('#stopRec').disabled = false;
+      $('#overlayStartRec').disabled = true;
+      $('#overlayStopRec').disabled = false;
+      setStatus('rec', 'جاري التسجيل');
+      toast('بدأ تسجيل الشاشة');
+    }catch(err){
+      console.error(err);
+      toast('تعذر بدء التسجيل');
+    }
+  }
+
+  function stopRecording(){
+    if(recorder && recorder.state !== 'inactive') recorder.stop();
+  }
+
+  function takeShot(){
+    if(!displayStream || !captureVideo.videoWidth || !captureVideo.videoHeight){
+      toast('المصدر غير جاهز بعد');
+      return;
+    }
+    try{
+      const canvas = $('#shotCanvas');
+      canvas.width = captureVideo.videoWidth;
+      canvas.height = captureVideo.videoHeight;
+      const ctx = canvas.getContext('2d', {alpha:false});
+      ctx.drawImage(captureVideo, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        if(!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+        a.href = url;
+        a.download = `screenshot-${canvas.width}x${canvas.height}-${stamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        toast(`تم حفظ لقطة PNG بدقة ${canvas.width}×${canvas.height}`);
+      }, 'image/png', 1);
+    }catch(err){
+      console.error(err);
+      toast('تعذر أخذ لقطة الشاشة');
+    }
+  }
+
+  // bind capture buttons
+  $('#pickScreen').onclick = pickScreen;
+  $('#startRec').onclick = startRecording;
+  $('#stopRec').onclick = stopRecording;
+  $('#shotBtn').onclick = takeShot;
+
+  $('#overlayPickScreen').onclick = pickScreen;
+  $('#overlayStartRec').onclick = startRecording;
+  $('#overlayStopRec').onclick = stopRecording;
+  $('#overlayShotBtn').onclick = takeShot;
+
+  window.addEventListener('resize', () => {
+    fitViewer();
+    if(overlay.classList.contains('show')) fitOverlayViewer(false);
+  });
+
+  overlay.addEventListener('click', e => {
+    if(e.target === overlay){
+      overlay.classList.remove('show');
+      document.body.classList.remove('lock-scroll');
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    try{ displayStream?.getTracks().forEach(t => t.stop()); }catch(e){}
+    try{ micStream?.getTracks().forEach(t => t.stop()); }catch(e){}
+  });
+
+  initCompatibilityUI();
+  renderMainViewer();
+})();
+</script>
+</body>
+</html>
