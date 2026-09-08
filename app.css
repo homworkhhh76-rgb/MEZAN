@@ -1793,3 +1793,198 @@ strong,b,h1,h2,h3,h4,h5,h6,.btn,.metric-card strong,.total-row.grand{font-weight
 .manager-auth-download-ready .btn{width:100%;max-width:420px;justify-content:center;margin-top:4px}
 .manager-auth-download-ready .btn svg{width:20px;height:20px}
 .manager-auth-download-ready small{color:var(--muted)}
+
+/* ===== v7.73 continuous voice cashier ===== */
+.cashier-utility-strip{flex-wrap:nowrap!important;white-space:nowrap!important}
+.cashier-utility-icon{position:relative;display:grid!important;place-items:center;flex:0 0 36px;width:36px;height:36px;min-width:36px;padding:0!important;border-radius:9px}
+.cashier-utility-badge{position:absolute;top:-4px;left:-4px;display:grid;place-items:center;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:#c83f49;color:#fff;font-size:7px;line-height:1;border:2px solid var(--panel,#fff)}
+.cashier-voice-button{position:relative;overflow:visible!important;isolation:isolate}
+.cashier-voice-button .voice-mic-icon{display:grid;place-items:center;transition:opacity .15s,transform .15s}
+.cashier-voice-button .voice-wave{position:absolute;inset:7px 6px;display:flex;align-items:center;justify-content:center;gap:2px;opacity:0;pointer-events:none}
+.cashier-voice-button .voice-wave i{display:block;width:2px;height:calc(4px + 13px * var(--voice-amp,.2));max-height:20px;border-radius:999px;background:currentColor;transform-origin:center;transition:height .06s linear}
+.cashier-voice-button .voice-live-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#e34854;box-shadow:0 0 0 3px rgba(227,72,84,.16);animation:voice-live-pulse 1.15s ease-in-out infinite}
+.cashier-voice-button.listening{color:#fff!important;background:#2367c9!important;border-color:#2367c9!important;box-shadow:0 0 0 3px rgba(35,103,201,.13),0 5px 15px rgba(35,103,201,.22)!important}
+.cashier-voice-button.listening .voice-mic-icon{opacity:0;transform:scale(.75)}
+.cashier-voice-button.listening .voice-wave{opacity:1}
+@keyframes voice-live-pulse{0%,100%{transform:scale(.85);opacity:.7}50%{transform:scale(1.18);opacity:1}}
+@media(max-width:900px){
+  .cashier-utility-mobile{display:flex!important;align-items:center!important;gap:3px!important;flex-wrap:nowrap!important;overflow:visible!important}
+  .cashier-utility-mobile .cashier-utility-icon{display:grid!important;flex:0 0 32px!important;width:32px!important;height:32px!important;min-width:32px!important}
+}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon{display:grid!important;flex:0 0 30px!important;width:30px!important;height:30px!important;min-width:30px!important;padding:0!important;font-size:0!important}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon svg{width:14px!important;height:14px!important}
+html.coarse-ui .cashier-utility-strip .cashier-utility-icon:nth-child(n){display:grid!important}
+html.coarse-ui .cashier-utility-strip .btn:nth-child(n+3){display:initial!important}
+html.coarse-ui .cashier-voice-button .voice-wave{inset:6px 5px;gap:1.5px}
+
+
+/* ===== v7.74 microphone visibility + stable category touch scroll ===== */
+.cashier-filters{
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  flex-wrap:nowrap!important;
+  overscroll-behavior-x:contain;
+  scroll-behavior:auto!important;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x!important;
+  scrollbar-width:thin;
+}
+.cashier-filters .category-chip{flex:0 0 auto!important;touch-action:manipulation}
+.cashier-utility-strip .cashier-voice-button,
+.cashier-action-cluster .cashier-voice-button{
+  display:grid!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.cashier-utility-mobile .cashier-voice-button{order:4!important}
+.cashier-utility-mobile [data-action="calculator"]{order:3!important}
+.cashier-utility-mobile [data-action="show-held"]{order:2!important}
+.cashier-utility-mobile [data-action="camera-scan"]{order:1!important}
+@media(max-width:900px){
+  .cashier-utility-mobile{max-width:none!important;overflow:visible!important}
+  .cashier-utility-mobile .cashier-voice-button{display:grid!important;flex:0 0 32px!important;width:32px!important;height:32px!important;min-width:32px!important}
+}
+html.coarse-ui .cashier-utility-strip .cashier-voice-button{display:grid!important}
+
+/* v7.76: visual waveform only — avoids taking the Android microphone away from SpeechRecognition. */
+@keyframes voiceBar776{0%,100%{height:5px}35%{height:17px}65%{height:9px}}
+.cashier-voice-button.listening .voice-wave i{height:6px!important;animation:voiceBar776 .72s ease-in-out infinite}
+.cashier-voice-button.listening .voice-wave i:nth-child(2){animation-delay:.11s}.cashier-voice-button.listening .voice-wave i:nth-child(3){animation-delay:.22s}.cashier-voice-button.listening .voice-wave i:nth-child(4){animation-delay:.33s}
+
+
+/* ===== v7.78 iPad orientation + centered browser printing support ===== */
+html.ipad-portrait-mobile .mobile-bottom-nav{display:flex!important}
+html.ipad-portrait-mobile .menu-button{display:grid!important}
+html.ipad-portrait-mobile .sidebar{transform:translateX(105%)!important;width:min(84vw,300px)!important;max-width:300px!important}
+html.ipad-portrait-mobile .sidebar.open{transform:translateX(0)!important}
+html.ipad-portrait-mobile .content-shell{margin-right:0!important;width:100%!important;max-width:100%!important;padding-bottom:68px!important}
+html.ipad-portrait-mobile .workspace{padding:12px!important}
+html.ipad-portrait-mobile .modern-pos .cashier-layout{grid-template-columns:1fr!important}
+html.ipad-portrait-mobile .cashier-mobile-split-tabs{display:flex!important}
+html.ipad-portrait-mobile .cashier-layout:not(.show-invoice) .cart-panel{display:none!important}
+html.ipad-portrait-mobile .cashier-layout.show-invoice .products-pane{display:none!important}
+
+/* v7.80 — compact mobile invoice actions + compact live list search */
+.cashier-mobile-invoice-actions{display:none}
+.compact-list-search{display:flex;align-items:center;gap:6px;width:min(260px,100%);height:34px;padding:0 9px;border:1px solid #cbd7e4;border-radius:11px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:border-color .16s ease,box-shadow .16s ease}
+.compact-list-search:focus-within{border-color:#6f9bd0;box-shadow:0 0 0 3px rgba(35,103,201,.09)}
+.compact-list-search svg{width:15px;height:15px;flex:0 0 15px;color:#64748b}
+.compact-list-search input{width:100%;min-width:0;height:30px;border:0!important;outline:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;font:inherit;font-size:11px;color:var(--text)}
+.compact-list-search input::-webkit-search-cancel-button{cursor:pointer}
+.record-panel-tools{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin:0 0 8px;min-height:34px}
+.record-panel-tools .record-filter-icon-wrap{margin:0}
+
+@media(max-width:620px){
+  .modern-pos .cashier-action-cluster{display:none!important}
+  .cashier-utility-mobile .cashier-voice-button{display:none!important}
+  .modern-pos.mobile-pane-invoice .cashier-mobile-invoice-actions{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:6px 6px 7px;border-bottom:1px solid #d8e1eb;background:#f7f9fc;position:sticky;top:51px;z-index:12}
+  .cashier-mobile-invoice-action{appearance:none;border:1px solid #cbd7e4;background:#fff;color:#26384a;border-radius:10px;height:44px;min-width:0;padding:3px 1px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;line-height:1;box-shadow:0 1px 2px rgba(15,23,42,.04);touch-action:manipulation}
+  .cashier-mobile-invoice-action.primary{background:#2367c9;border-color:#2367c9;color:#fff}
+  .cashier-mobile-invoice-action:disabled{opacity:.42;pointer-events:none}
+  .cashier-mobile-invoice-action svg{width:15px!important;height:15px!important;flex:0 0 15px}
+  .cashier-mobile-invoice-action .mobile-action-label{font-size:7.5px;font-weight:700;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .cashier-mobile-invoice-voice{position:relative}
+  .cashier-mobile-invoice-voice .voice-wave{position:absolute;inset:auto 3px 2px 3px;height:5px}
+  .cashier-mobile-invoice-voice .voice-live-dot{top:3px;left:4px}
+  .compact-list-search{width:min(220px,100%);height:32px}
+  .compact-list-search input{font-size:10px;height:28px}
+}
+
+/* iPad regular portrait is intentionally treated as mobile by v7.78. */
+html.ipad-portrait-mobile .modern-pos .cashier-action-cluster{display:none!important}
+html.ipad-portrait-mobile .cashier-utility-mobile .cashier-voice-button{display:none!important}
+html.ipad-portrait-mobile .cashier-layout.show-invoice .cashier-mobile-invoice-actions{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding:7px 8px;border-bottom:1px solid #d8e1eb;background:#f7f9fc}
+html.ipad-portrait-mobile .cashier-mobile-invoice-action{appearance:none;border:1px solid #cbd7e4;background:#fff;color:#26384a;border-radius:11px;height:46px;min-width:0;padding:4px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:inherit;line-height:1}
+html.ipad-portrait-mobile .cashier-mobile-invoice-action.primary{background:#2367c9;border-color:#2367c9;color:#fff}
+html.ipad-portrait-mobile .cashier-mobile-invoice-action:disabled{opacity:.42;pointer-events:none}
+html.ipad-portrait-mobile .cashier-mobile-invoice-action .mobile-action-label{font-size:8px;font-weight:700;white-space:nowrap}
+
+
+/* v7.81 — mobile cashier action bar directly under split tabs */
+@media(max-width:620px){
+  .modern-pos.mobile-pane-invoice > .cashier-mobile-invoice-actions{
+    display:grid!important;
+    grid-template-columns:repeat(7,minmax(0,1fr));
+    gap:4px;
+    padding:7px 7px 8px;
+    margin:0;
+    border-bottom:1px solid #d8e1eb;
+    background:#f7f9fc;
+    position:sticky;
+    top:51px;
+    z-index:19;
+    align-items:stretch;
+  }
+  .modern-pos.mobile-pane-catalog > .cashier-mobile-invoice-actions{display:none!important}
+  .modern-pos > .cashier-mobile-invoice-actions .cashier-mobile-invoice-action{
+    width:100%;
+    min-width:0;
+    height:52px;
+    min-height:52px;
+    padding:4px 0 3px;
+    border-radius:11px;
+    gap:3px;
+    line-height:1.05;
+    overflow:visible;
+  }
+  .modern-pos > .cashier-mobile-invoice-actions .cashier-mobile-invoice-action svg{
+    width:17px!important;
+    height:17px!important;
+    flex:0 0 17px;
+  }
+  .modern-pos > .cashier-mobile-invoice-actions .cashier-mobile-invoice-action .mobile-action-label{
+    display:block!important;
+    width:100%;
+    max-width:none;
+    overflow:visible!important;
+    text-overflow:clip!important;
+    white-space:nowrap!important;
+    font-size:8.6px!important;
+    font-weight:800!important;
+    line-height:1.15!important;
+    text-align:center;
+  }
+  .modern-pos.mobile-pane-invoice .cart-head{border-top:0!important}
+}
+html.ipad-portrait-mobile .modern-pos.mobile-pane-invoice > .cashier-mobile-invoice-actions{
+  display:grid!important;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:6px;
+  padding:8px 9px;
+  border-bottom:1px solid #d8e1eb;
+  background:#f7f9fc;
+}
+html.ipad-portrait-mobile .modern-pos.mobile-pane-catalog > .cashier-mobile-invoice-actions{display:none!important}
+html.ipad-portrait-mobile .modern-pos > .cashier-mobile-invoice-actions .cashier-mobile-invoice-action{
+  height:54px;min-height:54px;padding:5px 2px;gap:4px
+}
+html.ipad-portrait-mobile .modern-pos > .cashier-mobile-invoice-actions .cashier-mobile-invoice-action .mobile-action-label{
+  font-size:9px!important;overflow:visible!important;text-overflow:clip!important;white-space:nowrap!important
+}
+
+/* v7.81.1 - dedicated customer search bar */
+.customer-page-search{display:flex;align-items:center;gap:8px;width:min(320px,100%);height:38px;margin:0 0 12px auto;padding:0 11px;border:1px solid #cbd7e4;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.06);transition:border-color .16s ease,box-shadow .16s ease}
+.customer-page-search:focus-within{border-color:#5b8fd0;box-shadow:0 0 0 3px rgba(35,103,201,.10)}
+.customer-page-search svg{width:16px;height:16px;flex:0 0 16px;color:#64748b}
+.customer-page-search input{width:100%;min-width:0;height:34px;border:0!important;outline:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;font:inherit;font-size:12px;color:var(--text)}
+.customer-page-search input::placeholder{color:#8a98a8}
+@media(max-width:760px){.customer-page-search{width:100%;height:36px;margin-bottom:10px}.customer-page-search input{height:32px;font-size:12px}}
+
+
+/* v7.81.2 - customer search beside Add Customer */
+.customer-head-quick{display:flex;align-items:center;gap:8px;flex:0 0 auto;min-width:0}
+.customer-head-search{display:flex;align-items:center;gap:7px;width:220px;height:34px;padding:0 9px;border:1px solid #c5d0dc;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.06);color:#64748b;box-sizing:border-box;transition:border-color .15s ease,box-shadow .15s ease}
+.customer-head-search:focus-within{border-color:#5b8fd0;box-shadow:0 0 0 3px rgba(35,103,201,.10)}
+.customer-head-search svg{width:15px;height:15px;flex:0 0 15px}
+.customer-head-search input{width:100%;min-width:0;height:30px;padding:0!important;border:0!important;outline:0!important;background:transparent!important;box-shadow:none!important;font:inherit;font-size:11px;color:var(--text)}
+.customer-head-search input::placeholder{color:#8794a3}
+@media(max-width:760px){
+  .page-head .actions:has(.customer-head-quick){width:100%;overflow-x:auto;align-items:center}
+  .customer-head-quick{width:min(100%,390px);flex:0 0 min(100%,390px);gap:7px}
+  .customer-head-search{width:auto;flex:1 1 auto;min-width:135px;height:36px;border-radius:9px}
+  .customer-head-search input{height:32px;font-size:11.5px}
+  .customer-head-quick .btn{flex:0 0 auto!important;min-width:118px;height:36px;white-space:nowrap}
+}
+
+/* v7.81.4 — visible sync queue reset + backup import status */
+.sync-queue-control{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);display:flex;align-items:center;justify-content:space-between;gap:14px}.sync-queue-info{display:flex;align-items:flex-start;gap:10px;min-width:0}.sync-queue-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:var(--primary-soft);color:var(--primary);flex:0 0 auto}.sync-queue-info>div{min-width:0}.sync-queue-info b{display:block;color:var(--text);margin-bottom:3px}.sync-queue-info small{display:block;color:var(--muted);line-height:1.65}.sync-queue-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}.sync-queue-count{white-space:nowrap;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 10px;font-size:12px;color:var(--muted)}.sync-queue-count.has-items{color:var(--warning);font-weight:700}.sync-queue-actions .btn{white-space:nowrap}@media(max-width:700px){.sync-queue-control{align-items:stretch;flex-direction:column}.sync-queue-actions{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr)}.sync-queue-actions .btn{width:100%;min-height:46px}.sync-queue-count{display:grid;place-items:center}}

@@ -88,14 +88,15 @@
   let printWindow=null,printLock={id:'',at:0};
   function receiptHtml758(x){
     const st=D().settings||{},company=D().company||{},plain=v=>(Number(v)||0).toFixed(2),qtyTotal=(x.lines||[]).reduce((a,l)=>a+num(l.qty),0);
-    const logo=st.showInvoiceLogo!==false?`<div class="receipt-logo receipt-logo-${esc(st.invoiceLogoSize||'small')}"><img src="brand-logo.png" alt=""></div>`:'';
+    const logo=st.showInvoiceLogo!==false?`<div class="receipt-logo receipt-logo-${esc(st.invoiceLogoSize||'small')}"><img src="${esc(A.systemLogoSrc?.()||'brand-logo.png')}" alt=""></div>`:'';
+    const storeName=st.showInvoiceStoreName!==false&&company.name?`<div class="receipt-store-name">${esc(company.name)}</div>`:'';
     const employee=st.showInvoiceEmployee!==false?`<td class="r">الموظف : ${esc(x.userName||D().employees?.find(e=>e.id===x.userId)?.name||'—')}</td>`:'';
     const orderType=st.showInvoiceOrderType!==false?`<td class="l">نوع الطلب : ${esc(x.tableId?'محلي':(st.invoiceOrderTypeText||'سفري'))}</td>`:'';
     const customer=st.showInvoiceCustomer!==false?`<td class="r">العميل : ${esc(x.customerName||'عميل نقدي')}</td>`:'';
     const branch=st.showInvoiceBranch!==false?`<td class="l">الفرع : ${esc(A.branchName(x.branchId)||'—')}</td>`:'';
     const meta=[];if(employee||orderType)meta.push(`<tr>${employee||'<td></td>'}${orderType||'<td></td>'}</tr>`);if(customer||branch)meta.push(`<tr>${customer||'<td></td>'}${branch||'<td></td>'}</tr>`);
-    const cols=[];if(st.showInvoiceItemNumber!==false)cols.push(['no','ت','10%']);cols.push(['name','اسم المادة','35%']);if(st.showInvoiceQtyColumn!==false)cols.push(['qty','الكمية','15%']);if(st.showInvoicePriceColumn!==false)cols.push(['price','السعر','20%']);if(st.showInvoiceLineTotal!==false)cols.push(['total','اجمالي','20%']);
-    const rows=(x.lines||[]).map((l,i)=>`<tr>${cols.map(c=>`<td>${c[0]==='no'?i+1:c[0]==='name'?esc(l.productName):c[0]==='qty'?esc(l.qty):c[0]==='price'?plain(l.unitPrice):plain(l.total)}</td>`).join('')}</tr>`).join('');
+    const cols=[];if(st.showInvoiceItemNumber!==false)cols.push(['no','ت',10]);cols.push(['name','اسم المادة',34]);if(st.showInvoiceUnitColumn!==false)cols.push(['unit','الوحدة',14]);if(st.showInvoiceQtyColumn!==false)cols.push(['qty','الكمية',14]);if(st.showInvoicePriceColumn!==false)cols.push(['price','السعر',20]);if(st.showInvoiceLineTotal!==false)cols.push(['total','اجمالي',22]);const colWeight=cols.reduce((a,c)=>a+c[2],0)||1;
+    const rows=(x.lines||[]).map((l,i)=>`<tr>${cols.map(c=>`<td>${c[0]==='no'?i+1:c[0]==='name'?esc(l.productName):c[0]==='unit'?esc(l.unitName||'—'):c[0]==='qty'?esc(l.qty):c[0]==='price'?plain(l.unitPrice):plain(l.total)}</td>`).join('')}</tr>`).join('');
     const summary=[];if(st.showInvoiceQuantityTotal!==false)summary.push(`الكمية : ${qtyTotal}`);if(st.showInvoiceSubtotal!==false)summary.push(`اجمالي المبلغ : ${plain(x.subtotal)} ₪`);if(st.showInvoiceTax!==false&&num(x.tax)!==0)summary.push(`الضريبة : ${plain(x.tax)} ₪`);if(st.showInvoiceDiscount!==false)summary.push(`الخصم : ${plain(x.discount)} ₪`);if(st.showInvoicePaid!==false)summary.push(`المدفوع : ${plain(x.paid)} ₪`);if(st.showInvoiceDue!==false)summary.push(`المتبقي : ${plain(x.due)} ₪`);
     const summaryRows=[];for(let i=0;i<summary.length;i+=2)summaryRows.push(`<tr><td class="r">${summary[i]||''}</td><td class="l">${summary[i+1]||''}</td></tr>`);
     const net=st.showInvoiceNetAmount!==false?`<table class="receipt-bordered receipt-net"><tr><td>المبلغ الصافي :</td><td>${plain(x.total)} ₪</td></tr></table>`:'';
@@ -103,14 +104,14 @@
     const message=st.showInvoiceMessage!==false&&company.invoiceNote?`<div class="receipt-footer-text">${esc(company.invoiceNote)}</div>`:'';
     const dt=new Date(x.createdAt||x.updatedAt||`${x.date||A.today()}T00:00:00`),dateTime=dt.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
     const footer=(st.showInvoiceFooterTime!==false||st.showInvoiceFooterNumber!==false)?`<table class="receipt-footer-info"><tr><td class="l">${st.showInvoiceFooterTime!==false?esc(dateTime):''}</td><td class="r">${st.showInvoiceFooterNumber!==false?esc(x.number):''}</td></tr></table>`:'';
-    return `${logo}${meta.length?`<table class="receipt-header-table">${meta.join('')}</table>`:''}<table class="receipt-bordered receipt-items"><thead><tr>${cols.map(c=>`<th style="width:${c[2]}">${c[1]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${summaryRows.length?`<table class="receipt-totals">${summaryRows.join('')}</table>`:''}${net}${barcode}${message}${footer}`;
+    return `${logo}${storeName}${meta.length?`<table class="receipt-header-table">${meta.join('')}</table>`:''}<table class="receipt-bordered receipt-items"><thead><tr>${cols.map(c=>`<th style="width:${(c[2]/colWeight*100).toFixed(2)}%">${c[1]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${summaryRows.length?`<table class="receipt-totals">${summaryRows.join('')}</table>`:''}${net}${barcode}${message}${footer}`;
   }
   function safePrintInvoice758(id){
     id=String(id||'').trim();const sale=D().sales?.find(x=>String(x.id)===id);if(!sale)return A.toast('الفاتورة غير موجودة.','error');
     const at=Date.now();if(printLock.id===id&&at-printLock.at<1800){try{printWindow?.focus?.()}catch(_){}return true}printLock={id,at};
-    const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,8)}`,key=`almezan_print_job_v758_${token}`,size=D().settings?.printSize==='58'?'58':D().settings?.printSize==='a4'?'a4':'80',offsetMm=size==='58'?num(D().settings?.printOffset58??0):size==='80'?num(D().settings?.printOffset80??0):0;
+    const token=`${id}-${at.toString(36)}-${Math.random().toString(36).slice(2,8)}`,key=`almezan_print_job_v758_${token}`,size=D().settings?.printSize==='58'?'58':D().settings?.printSize==='a4'?'a4':'80',offsetMm=0;
     try{localStorage.setItem(key,JSON.stringify({html:receiptHtml758(sale),size,offsetMm,number:sale.number,createdAt:at}))}catch(e){return A.toast('تعذر تجهيز الفاتورة للطباعة.','error')}
-    const url=`./print-invoice.html?v=770&token=${encodeURIComponent(token)}`;
+    const url=`./print-invoice.html?v=7815&token=${encodeURIComponent(token)}`;
     try{
       if(printWindow&&!printWindow.closed){printWindow.location.replace(url);printWindow.focus();return true}
       printWindow=window.open(url,'almezanInvoicePrint');if(printWindow){printWindow.focus();return true}

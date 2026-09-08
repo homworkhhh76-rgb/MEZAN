@@ -7,12 +7,13 @@
   'use strict';
   const META_PREFIX='almezan_sync_meta_v4::';
   const PENDING_PREFIX='almezan_sync_pending_v4::';
+  const FAILED_PREFIX='almezan_sync_failed_v4::';
   const LEGACY_META_PREFIX='almezan_sync_meta_v3::';
   const LEGACY_PENDING_PREFIX='almezan_sync_pending_v3::';
   const VERY_LEGACY_PENDING_PREFIX='almezan_sync_pending_v1::';
   const DEVICE_KEY='almezan_device_id_v1';
   const IDB_NAME='almezan_offline_v1',IDB_STORE='tenants',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
-  const REMOTE_ACTIVE_MS=5000,REMOTE_IDLE_MS=8000,CASHIER_ACTIVE_MS=1800,CASHIER_IDLE_MS=5000,PUSH_BATCH_SIZE=24;
+  const REMOTE_ACTIVE_MS=5000,REMOTE_IDLE_MS=8000,CASHIER_ACTIVE_MS=1800,CASHIER_IDLE_MS=5000,PUSH_BATCH_SIZE=24,IMPORT_PUSH_BATCH_SIZE=48;
   let snapshot=null,busy=false,suppress=false,timer=null,retryTimer=null,retryAttempt=0,lastProbeAt=0,lastActivityAt=Date.now(),schemaTenant='';
   const safe=v=>String(v??'').trim();
   const clone=v=>JSON.parse(JSON.stringify(v));
@@ -29,19 +30,23 @@
   const snapQty=v=>v&&typeof v==='object'?Number(v.qty||0):0;
   function metaKey(t=tenant()){return META_PREFIX+encodeURIComponent(t||'none')}
   function pendingKey(t=tenant()){return PENDING_PREFIX+encodeURIComponent(t||'none')}
+  function failedKey(t=tenant()){return FAILED_PREFIX+encodeURIComponent(t||'none')}
   function readJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_){return fallback}}
   function readMeta(){return readJson(metaKey(),{protocol:4,records:{},remoteBatch:0,batchInitialized:false,lastPullAt:0,lastPushAt:0,lastSuccessAt:0})}
   function writeMeta(m){try{localStorage.setItem(metaKey(),JSON.stringify(m))}catch(_){}}
   function migrateLegacyQueue(){const t=tenant();if(!t)return;const pk=pendingKey(t);if(localStorage.getItem(pk))return;let old=readJson(LEGACY_PENDING_PREFIX+encodeURIComponent(t),{});if(!old||!Object.keys(old).length)old=readJson(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(t),{});if(old&&Object.keys(old).length)try{localStorage.setItem(pk,JSON.stringify(old))}catch(_){} }
   function readPending(){migrateLegacyQueue();return readJson(pendingKey(),{})}
   function writePending(p){try{localStorage.setItem(pendingKey(),JSON.stringify(p))}catch(_){}emitStatus()}
+  function readFailed(){return readJson(failedKey(),{})}
+  function writeFailed(p){try{localStorage.setItem(failedKey(),JSON.stringify(p))}catch(_){}emitStatus()}
   function pkey(dataset,key){return dataset+'\u0001'+key}
   function revNow(){return Date.now()*1000+Math.floor(Math.random()*900)}
   function enqueue(dataset,key,deleted=false,rev=revNow(),extra={}){if(!tenant())return false;const p=readPending(),basePk=pkey(dataset,key),isStockDelta=extra.mode==='stockDelta',pk=isStockDelta?`${basePk}\u0001${rev}`:basePk,cur=p[pk];if(cur&&Number(cur.rev||0)>rev)return false;p[pk]={dataset,key,deleted:!!deleted,rev,deviceId:deviceId(),...extra};writePending(p);const m=readMeta();m.records[basePk]={...(m.records[basePk]||{}),rev,deleted:!!deleted};writeMeta(m);return true}
   function pendingRevForRecord(pending,dataset,key){let rev=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key))rev=Math.max(rev,Number(op.rev||0));return rev}
   function pendingQtyDelta(pending,dataset,key){let delta=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key)&&op?.mode==='stockDelta')delta+=Number(op.delta||0);return Number(delta.toFixed(8))}
   function pendingCount(){return Object.keys(readPending()).length}
-  function emitStatus(extra={}){window.dispatchEvent(new CustomEvent('almezan:sync-status',{detail:{pending:pendingCount(),online:navigator.onLine!==false,busy,...extra}}))}
+  function failedCount(){return Object.keys(readFailed()).length}
+  function emitStatus(extra={}){window.dispatchEvent(new CustomEvent('almezan:sync-status',{detail:{pending:pendingCount(),failed:failedCount(),online:navigator.onLine!==false,busy,...extra}}))}
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   async function retryRead(fn,attempts=2){let last;for(let i=0;i<attempts;i++){try{return await fn()}catch(e){last=e;if(navigator.onLine===false||i===attempts-1)break;await sleep(350*(i+1))}}throw last}
   function clearRetry(){clearTimeout(retryTimer);retryTimer=null;retryAttempt=0}
@@ -109,27 +114,42 @@
     const value=Number(rowsOf(s.direct,r)[0]?.value||target);
     return formatDocumentNumber(prefix,value)
   }
+  function buildPushStatements(s,batch,appDb){
+    const statements=[{sql:'BEGIN IMMEDIATE',args:[]},{sql:`INSERT INTO ${s.metaTable}(id,batch) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET batch=batch+1`,args:[]}];let maxSaleSeq=0;
+    for(const[,op]of batch){
+      const current=getRecord(appDb,op.dataset,op.key),deleted=op.deleted||current===undefined,envelope={v:deleted?null:current,deleted,rev:op.rev,deviceId:op.deviceId||deviceId()};
+      if(op.dataset==='sales'&&!deleted)maxSaleSeq=Math.max(maxSaleSeq,documentSequence(current?.number));
+      if((op.dataset==='stock'||op.dataset==='repStock')&&op.mode==='stockDelta'){
+        const parts=String(op.key).split('::'),fallback=op.dataset==='repStock'?{repId:parts[0]||'',productId:parts[1]||'',qtyBase:Number(op.delta||0)}:{productId:parts[0]||'',warehouseId:parts[1]||'',qtyBase:Number(op.delta||0)},base=current&&typeof current==='object'?{...current,qtyBase:Number(current.qtyBase||0)}:fallback,dev=op.deviceId||deviceId(),devKey='d'+hashText(dev),clockPath=`$.stockClock.${devKey}`,rev=Number(op.rev),insertEnvelope={v:base,deleted:false,rev,deviceId:dev,stockClock:{[devKey]:rev}};
+        statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=json_set(CASE WHEN json_type(${s.table}.payload,'$.v')='object' THEN ${s.table}.payload ELSE excluded.payload END,'$.v.qtyBase',COALESCE(CAST(json_extract(${s.table}.payload,'$.v.qtyBase') AS REAL),0)+?,'$.rev',?,'$.deviceId',?,'${clockPath}',?),deleted=0,updated_at=?,sync_batch=(SELECT batch FROM ${s.metaTable} WHERE id=1) WHERE COALESCE(CAST(json_extract(${s.table}.payload,'${clockPath}') AS INTEGER),0)<?`,args:[cloudPath(op.dataset,op.key),JSON.stringify(insertEnvelope),0,rev,Number(op.delta||0),rev,dev,rev,rev,rev]});
+        continue
+      }
+      statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=excluded.payload,deleted=excluded.deleted,updated_at=excluded.updated_at,sync_batch=excluded.sync_batch WHERE excluded.sync_batch>=${s.table}.sync_batch`,args:[cloudPath(op.dataset,op.key),JSON.stringify(envelope),deleted?1:0,Number(op.rev)]})
+    }
+    if(maxSaleSeq>0)statements.push({sql:`INSERT INTO ${s.seqTable}(name,value) VALUES('sale',?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value END`,args:[maxSaleSeq]});
+    statements.push({sql:'COMMIT',args:[]});return statements
+  }
+  function removePendingIfSame(pk,op){const latest=readPending();if(Number(latest[pk]?.rev||0)===Number(op.rev)){delete latest[pk];writePending(latest);return true}return false}
+  function quarantinePending(pk,op,error){
+    const latest=readPending();if(Number(latest[pk]?.rev||0)!==Number(op.rev))return false;
+    delete latest[pk];writePending(latest);
+    const failed=readFailed(),prev=failed[pk]||{};failed[pk]={...op,error:String(error?.message||error||'فشل غير معروف'),failedAt:Date.now(),attempts:Number(prev.attempts||0)+1};writeFailed(failed);return true
+  }
   async function pushPending(){
     const pending=readPending(),entries=Object.entries(pending);if(!entries.length)return{uploaded:0,remaining:0};
-    const s=await ensureSyncSchema(),appDb=window.AlMezan?.db||{};let uploaded=0;
-    for(let offset=0;offset<entries.length;offset+=PUSH_BATCH_SIZE){
-      const batch=entries.slice(offset,offset+PUSH_BATCH_SIZE),statements=[{sql:'BEGIN IMMEDIATE',args:[]},{sql:`INSERT INTO ${s.metaTable}(id,batch) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET batch=batch+1`,args:[]}];let maxSaleSeq=0;
-      for(const[,op]of batch){
-        const current=getRecord(appDb,op.dataset,op.key),deleted=op.deleted||current===undefined,envelope={v:deleted?null:current,deleted,rev:op.rev,deviceId:op.deviceId||deviceId()};
-        if(op.dataset==='sales'&&!deleted)maxSaleSeq=Math.max(maxSaleSeq,documentSequence(current?.number));
-        if((op.dataset==='stock'||op.dataset==='repStock')&&op.mode==='stockDelta'){
-          const parts=String(op.key).split('::'),fallback=op.dataset==='repStock'?{repId:parts[0]||'',productId:parts[1]||'',qtyBase:Number(op.delta||0)}:{productId:parts[0]||'',warehouseId:parts[1]||'',qtyBase:Number(op.delta||0)},base=current&&typeof current==='object'?{...current,qtyBase:Number(current.qtyBase||0)}:fallback,dev=op.deviceId||deviceId(),devKey='d'+hashText(dev),clockPath=`$.stockClock.${devKey}`,rev=Number(op.rev),insertEnvelope={v:base,deleted:false,rev,deviceId:dev,stockClock:{[devKey]:rev}};
-          statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=json_set(CASE WHEN json_type(${s.table}.payload,'$.v')='object' THEN ${s.table}.payload ELSE excluded.payload END,'$.v.qtyBase',COALESCE(CAST(json_extract(${s.table}.payload,'$.v.qtyBase') AS REAL),0)+?,'$.rev',?,'$.deviceId',?,'${clockPath}',?),deleted=0,updated_at=?,sync_batch=(SELECT batch FROM ${s.metaTable} WHERE id=1) WHERE COALESCE(CAST(json_extract(${s.table}.payload,'${clockPath}') AS INTEGER),0)<?`,args:[cloudPath(op.dataset,op.key),JSON.stringify(insertEnvelope),0,rev,Number(op.delta||0),rev,dev,rev,rev,rev]});
-          continue
-        }
-        statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=excluded.payload,deleted=excluded.deleted,updated_at=excluded.updated_at,sync_batch=excluded.sync_batch WHERE excluded.sync_batch>=${s.table}.sync_batch`,args:[cloudPath(op.dataset,op.key),JSON.stringify(envelope),deleted?1:0,Number(op.rev)]})
+    const s=await ensureSyncSchema(),appDb=window.AlMezan?.db||{};let uploaded=0,skipped=0;
+    const batchSize=entries.some(([,op])=>op?.imported===true)?IMPORT_PUSH_BATCH_SIZE:PUSH_BATCH_SIZE;
+    for(let offset=0;offset<entries.length;offset+=batchSize){
+      const batch=entries.slice(offset,offset+batchSize);
+      try{
+        await s.direct.pipeline(s.cfg,buildPushStatements(s,batch,appDb),Math.max(30000,batch.length*1300));
+        for(const[pk,op]of batch)if(removePendingIfSame(pk,op))uploaded++
+      }catch(batchError){
+        console.warn('[AlMeezan sync] batch failed; isolating operations so one bad record cannot block the queue.',batchError);
+        for(const pair of batch){const[pk,op]=pair;try{await s.direct.pipeline(s.cfg,buildPushStatements(s,[pair],appDb),30000);if(removePendingIfSame(pk,op))uploaded++}catch(error){if(quarantinePending(pk,op,error))skipped++;console.warn('[AlMeezan sync] skipped failed queue item',op?.dataset,op?.key,error)}}
       }
-      if(maxSaleSeq>0)statements.push({sql:`INSERT INTO ${s.seqTable}(name,value) VALUES('sale',?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value END`,args:[maxSaleSeq]});
-      statements.push({sql:'COMMIT',args:[]});
-      await s.direct.pipeline(s.cfg,statements,Math.max(30000,batch.length*1300));
-      const latest=readPending();for(const[pk,op]of batch){if(Number(latest[pk]?.rev||0)===Number(op.rev)){delete latest[pk];uploaded++}}writePending(latest)
     }
-    const m=readMeta();m.lastPushAt=Date.now();writeMeta(m);return{uploaded,remaining:pendingCount()}
+    const m=readMeta();m.lastPushAt=Date.now();writeMeta(m);return{uploaded,skipped,failed:failedCount(),remaining:pendingCount()}
   }
   async function applyRows(rows,remoteBatch){
     const pending=readPending(),meta=readMeta(),current=clone(window.AlMezan?.db||{}),changedDatasets=new Set(),changedRecords={};let applied=0;
@@ -164,13 +184,55 @@
   }
   function probeInterval(){const active=Date.now()-lastActivityAt<30000;if(window.AlMezan?.state?.view==='cashier')return active?CASHIER_ACTIVE_MS:CASHIER_IDLE_MS;return active?REMOTE_ACTIVE_MS:REMOTE_IDLE_MS}
   async function checkRemote({force=false}={}){if(busy||!tenant()||navigator.onLine===false||document.visibilityState==='hidden')return{skipped:true};const now=Date.now(),interval=pendingCount()?Math.min(3000,probeInterval()):probeInterval();if(!force&&now-lastProbeAt<Math.max(1000,interval-350))return{throttled:true};lastProbeAt=now;try{if(pendingCount())return syncNow({manual:false,force:true,checkRemote:true});const s=await ensureSyncSchema(),remote=await readRemoteBatch(s),local=Number(readMeta().remoteBatch||0);if(!readMeta().batchInitialized||remote>local)return syncNow({manual:false,checkRemote:true});return{changed:false,remoteBatch:remote}}catch(error){if(pendingCount())scheduleRetry();return{error:true,message:String(error?.message||error)}}}
-  async function syncNow({manual=false,force=false,checkRemote:wantRemote=false}={}){if(busy){if(manual)window.AlMezan?.toast?.('المزامنة جارية الآن، انتظر لحظة.','warning');return{busy:true,remaining:pendingCount()}}if(!tenant())return{unavailable:true,remaining:pendingCount()};if(navigator.onLine===false){emitStatus({state:'offline'});if(manual)window.AlMezan?.toast?.('أنت الآن دون إنترنت. التغييرات محفوظة محلياً وستتم مزامنتها عند عودة الاتصال.','warning');return{offline:true,remaining:pendingCount()}};const hasPending=pendingCount()>0;if(!manual&&!force&&!wantRemote&&!hasPending)return{idle:true,remaining:0};busy=true;emitStatus({state:'syncing'});try{const pushed=hasPending?await pushPending():{uploaded:0,remaining:0},pulled=(manual||wantRemote||hasPending)?await pullChanges({force:manual||force}):{applied:0,remoteRows:0,changedDatasets:[]},result={...pushed,...pulled,remaining:pendingCount(),success:true};clearRetry();emitStatus({state:'success',lastSuccessAt:Date.now()});try{window.dispatchEvent(new CustomEvent('almezan:sync-complete',{detail:result}))}catch(_){}if(manual)window.AlMezan?.toast?.(result.remaining?`تمت المزامنة وبقي ${result.remaining} تغيير معلق وسيعاد إرساله تلقائياً.`:result.applied?`اكتملت المزامنة وتحدثت الشاشة (${result.applied} تغيير).`:'اكتملت المزامنة — البيانات محدثة.','success');if(result.remaining)scheduleRetry();return result}catch(error){console.error('AlMeezan sync:',error);emitStatus({state:'error',message:String(error?.message||error)});if(pendingCount())scheduleRetry();if(manual)window.AlMezan?.toast?.('تعذر الاتصال الآن. بياناتك محفوظة وسيعيد النظام المزامنة تلقائياً.','warning',5200);return{error:true,message:String(error?.message||error),remaining:pendingCount()}}finally{busy=false;emitStatus()}}
+  async function syncNow({manual=false,force=false,checkRemote:wantRemote=false}={}){if(busy){if(manual)window.AlMezan?.toast?.('المزامنة جارية الآن، انتظر لحظة.','warning');return{busy:true,remaining:pendingCount()}}if(!tenant())return{unavailable:true,remaining:pendingCount()};if(navigator.onLine===false){emitStatus({state:'offline'});if(manual)window.AlMezan?.toast?.('أنت الآن دون إنترنت. التغييرات محفوظة محلياً وستتم مزامنتها عند عودة الاتصال.','warning');return{offline:true,remaining:pendingCount()}};const hasPending=pendingCount()>0;if(!manual&&!force&&!wantRemote&&!hasPending)return{idle:true,remaining:0};busy=true;emitStatus({state:'syncing'});try{const pushed=hasPending?await pushPending():{uploaded:0,remaining:0},pulled=(manual||wantRemote||hasPending)?await pullChanges({force:manual||force}):{applied:0,remoteRows:0,changedDatasets:[]},result={...pushed,...pulled,remaining:pendingCount(),success:true};clearRetry();emitStatus({state:'success',lastSuccessAt:Date.now()});try{window.dispatchEvent(new CustomEvent('almezan:sync-complete',{detail:result}))}catch(_){}if(manual){const skipped=Number(result.skipped||0);window.AlMezan?.toast?.(skipped?`اكتملت المزامنة وتم تجاوز ${skipped} حركة معطلة حتى لا توقف باقي الطابور.`:result.remaining?`تمت المزامنة وبقي ${result.remaining} تغيير معلق وسيعاد إرساله تلقائياً.`:result.applied?`اكتملت المزامنة وتحدثت الشاشة (${result.applied} تغيير).`:'اكتملت المزامنة — البيانات محدثة.',skipped?'warning':'success',skipped?5200:undefined)};if(result.remaining)scheduleRetry();return result}catch(error){console.error('AlMeezan sync:',error);emitStatus({state:'error',message:String(error?.message||error)});if(pendingCount())scheduleRetry();if(manual)window.AlMezan?.toast?.('تعذر الاتصال الآن. بياناتك محفوظة وسيعيد النظام المزامنة تلقائياً.','warning',5200);return{error:true,message:String(error?.message||error),remaining:pendingCount()}}finally{busy=false;emitStatus()}}
   function schedule(delay=800){if(!pendingCount())return;clearTimeout(timer);timer=setTimeout(()=>syncNow({manual:false}).catch(()=>{}),Math.max(100,Number(delay)||800))}
   async function initialize(db,{seed=false}={}){const t=tenant();if(!t)return{tenant:''};try{await navigator.storage?.persist?.()}catch(_){}const mirror=await readMirror(t).catch(()=>null),fastSavedAt=Number(localStorage.getItem(DB_SAVED_PREFIX+encodeURIComponent(t))||0);if(mirror?.db&&(window.AlMezan?.hasTenantLocalData?.()===false||Number(mirror.savedAt||0)>fastSavedAt)){suppress=true;try{window.AlMezan.replaceDBFromSync(mirror.db)}finally{suppress=false}db=window.AlMezan.db}snapshot=snapshotDb(db||window.AlMezan?.db||{});if(seed)seedAll(db||window.AlMezan.db);emitStatus();setTimeout(()=>{if(pendingCount())schedule(250);else checkRemote({force:true}).catch(()=>{})},500);return{tenant:t,pending:pendingCount(),mirror:!!mirror}}
   function resetForTenant(db){schemaTenant='';clearRetry();snapshot=snapshotDb(db||{});emitStatus()}
   function isRemoteEmptyResult(result){return Number(result?.remoteRows||0)===0}
   function needsBootstrap(){const m=readMeta();return !m.batchInitialized&&pendingCount()===0}
   function requestSync(delay=250){if(pendingCount())schedule(delay)}
+  function queueBackupSnapshot(db,{clearExisting=true,includeKnownDeletes=true}={}){
+    const t=tenant();if(!t)return{queued:0,deletions:0,datasets:0,unavailable:true};
+    // استعادة النسخة تعتبر إدخالا يدويا كاملا: نلغي أي طابور قديم حتى لا يكتب
+    // تغييرات سابقة فوق النسخة المستعادة، ثم نضع snapshot كامل لكل أقسام النظام.
+    if(clearExisting){
+      try{localStorage.removeItem(pendingKey(t))}catch(_){}
+      try{localStorage.removeItem(LEGACY_PENDING_PREFIX+encodeURIComponent(t))}catch(_){}
+      try{localStorage.removeItem(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(t))}catch(_){}
+      try{localStorage.removeItem(failedKey(t))}catch(_){}
+      clearTimeout(timer);timer=null;clearRetry();
+    }
+    const source=db||window.AlMezan?.db||{},next=snapshotDb(source),meta=readMeta(),pending=readPending(),dev=deviceId(),known=Object.keys(meta.records||{}),knownByDataset=new Map();
+    for(const pk of known){const cut=String(pk).indexOf('\u0001');if(cut<1)continue;const dataset=String(pk).slice(0,cut),key=String(pk).slice(cut+1);if(!knownByDataset.has(dataset))knownByDataset.set(dataset,new Set());knownByDataset.get(dataset).add(key)}
+    const datasets=new Set([...Object.keys(next),...(includeKnownDeletes?[...knownByDataset.keys()]:[])]);let rev=Date.now()*1000+Math.floor(Math.random()*500),queued=0,deletions=0;
+    for(const dataset of datasets){
+      const currentKeys=new Set(Object.keys(next[dataset]?.map||{}));
+      for(const key of currentKeys){
+        const pk=pkey(dataset,key),opRev=rev++;
+        pending[pk]={dataset,key,deleted:false,rev:opRev,deviceId:dev,mode:'snapshotReplace',imported:true};
+        meta.records[pk]={...(meta.records[pk]||{}),rev:opRev,deleted:false};queued++;
+      }
+      if(includeKnownDeletes){
+        for(const key of (knownByDataset.get(dataset)||[]))if(!currentKeys.has(key)){
+          const pk=pkey(dataset,key),opRev=rev++;
+          pending[pk]={dataset,key,deleted:true,rev:opRev,deviceId:dev,mode:'snapshotReplace',imported:true};
+          meta.records[pk]={...(meta.records[pk]||{}),rev:opRev,deleted:true};queued++;deletions++;
+        }
+      }
+    }
+    writeMeta(meta);writePending(pending);snapshot=next;mirrorDb(source).catch(()=>{});emitStatus({state:'backup-import-queued',importQueued:queued,importDeletions:deletions});
+    if(queued)schedule(60);
+    return{queued,deletions,datasets:datasets.size,remaining:pendingCount(),failed:failedCount()}
+  }
+  function clearQueue({includeFailed=true}={}){
+    const pending=pendingCount(),failed=failedCount();
+    try{localStorage.removeItem(pendingKey())}catch(_){}
+    try{localStorage.removeItem(LEGACY_PENDING_PREFIX+encodeURIComponent(tenant()||'none'))}catch(_){}
+    try{localStorage.removeItem(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(tenant()||'none'))}catch(_){}
+    if(includeFailed)try{localStorage.removeItem(failedKey())}catch(_){}
+    clearTimeout(timer);timer=null;clearRetry();snapshot=snapshotDb(window.AlMezan?.db||{});emitStatus({state:'queue-cleared'});
+    return{clearedPending:pending,clearedFailed:includeFailed?failed:0,remaining:pendingCount(),failed:failedCount()}
+  }
   ['pointerdown','keydown','input','touchstart'].forEach(type=>document.addEventListener(type,()=>{lastActivityAt=Date.now()},{capture:true,passive:true}));window.addEventListener('online',()=>{retryAttempt=0;lastActivityAt=Date.now();if(pendingCount())schedule(200);else checkRemote({force:true}).catch(()=>{})});window.addEventListener('offline',()=>emitStatus({state:'offline'}));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){lastActivityAt=Date.now();setTimeout(()=>checkRemote({force:true}).catch(()=>{}),350)}});window.addEventListener('focus',()=>{lastActivityAt=Date.now();checkRemote({force:true}).catch(()=>{})});setInterval(()=>checkRemote().catch(()=>{}),900);
-  window.AlMezanSync={version:4.0,capture,seedAll,initialize,resetForTenant,syncNow,pushPending,pullAll:pullChanges,pullChanges,checkRemote,pendingCount,mirrorDb,readMirror,isRemoteEmptyResult,needsBootstrap,requestSync,peekDocumentNumber,reserveDocumentNumber,claimDocumentNumber,get busy(){return busy},get suppress(){return suppress}};
+  window.AlMezanSync={version:4.2,capture,seedAll,queueBackupSnapshot,initialize,resetForTenant,syncNow,pushPending,pullAll:pullChanges,pullChanges,checkRemote,pendingCount,failedCount,clearQueue,mirrorDb,readMirror,isRemoteEmptyResult,needsBootstrap,requestSync,peekDocumentNumber,reserveDocumentNumber,claimDocumentNumber,get busy(){return busy},get suppress(){return suppress}};
 })();
