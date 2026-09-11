@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#087f89">
+<meta name="description" content="قارئ باركود الميزان برو لربط كاميرا الجوال بالكاشير">
+<title>قارئ باركود الميزان</title>
+<link rel="manifest" href="scanner-manifest.webmanifest?v=7840">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{font-family:"Cairo",Tahoma,Arial,sans-serif;color:#17202b;background:#eef3f6;--primary:#087f89;--primary2:#079aa7;--blue:#2367c9;--border:#d8e2e8;--muted:#6c7887;--card:#fff;--ok:#159447;--danger:#c13a3a;--shadow:0 8px 24px rgba(20,40,55,.08)}*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Cairo",Tahoma,Arial,sans-serif}body{min-height:100vh;background:radial-gradient(circle at 80% -5%,rgba(7,154,167,.13),transparent 34%),linear-gradient(180deg,#f8fbfc 0,#eef3f6 100%);padding:env(safe-area-inset-top) 12px calc(14px + env(safe-area-inset-bottom))}button{font:inherit}.app{width:min(680px,100%);margin:auto}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 14px}.brand{display:flex;align-items:center;gap:11px;min-width:0}.brand-logo{width:46px;height:46px;border:1px solid var(--border);border-radius:13px;background:#fff;padding:5px;object-fit:contain;box-shadow:0 4px 14px rgba(20,40,55,.05)}.brand h1{margin:0;font-size:18px;line-height:1.35}.brand p{margin:2px 0 0;color:var(--muted);font-size:11px}.secure-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #cae2e5;border-radius:999px;background:#f5fbfb;color:#08747d;font-size:10px;white-space:nowrap}.secure-badge:before{content:"";width:7px;height:7px;border-radius:50%;background:#18a768}.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);margin-bottom:11px;overflow:hidden}.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;border-bottom:1px solid #e9eef2}.card-title{display:flex;align-items:center;gap:9px}.icon{width:34px;height:34px;border-radius:10px;background:#edf7f8;border:1px solid #d9eaec;display:grid;place-items:center;color:var(--primary);font-weight:700}.card-title h2{margin:0;font-size:13px}.card-title small{display:block;color:var(--muted);font-size:10px;margin-top:1px}.card-body{padding:12px 13px}.link-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}.scanner-link-status{min-height:45px;display:flex;align-items:center;gap:9px;border:1px solid #dde6ec;border-radius:11px;background:#f8fafb;padding:9px 11px;color:#465567}.scanner-link-status:before{content:"";width:9px;height:9px;border-radius:50%;background:#9aa6b2;box-shadow:0 0 0 4px rgba(154,166,178,.12)}.scanner-link-status.connecting:before{background:#d99011;box-shadow:0 0 0 4px rgba(217,144,17,.12)}.scanner-link-status.connected:before{background:var(--ok);box-shadow:0 0 0 4px rgba(21,148,71,.12)}.scanner-link-status.error:before{background:var(--danger);box-shadow:0 0 0 4px rgba(193,58,58,.12)}.scanner-link-status b{font-size:11px}.pair-buttons{display:flex;gap:7px;flex-wrap:wrap}.btn{min-height:42px;border:0;border-radius:10px;padding:9px 12px;cursor:pointer;font-weight:600;transition:.16s ease}.btn:active{transform:scale(.98)}.btn:disabled{opacity:.48;cursor:not-allowed}.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;box-shadow:0 5px 14px rgba(7,154,167,.18)}.btn-secondary{background:#fff;color:#334155;border:1px solid var(--border)}.btn-danger{background:#fff;color:#b42318;border:1px solid #efcdca}.note{margin:9px 0 0;color:var(--muted);font-size:10px;line-height:1.8}.camera-card{padding:0}.viewer{position:relative;display:grid;place-items:center;background:#111827;min-height:350px;overflow:hidden}.viewer video{display:block;width:100%;height:min(62vh,560px);min-height:350px;object-fit:cover;background:#111827}.camera-overlay{position:absolute;inset:0;pointer-events:none}.camera-overlay:before{content:"";position:absolute;left:10%;right:10%;top:30%;bottom:30%;border:2px solid rgba(255,255,255,.94);border-radius:18px;box-shadow:0 0 0 999px rgba(1,8,17,.24)}.corner{position:absolute;width:35px;height:35px;border-color:#25d6df;border-style:solid;z-index:2}.c1{top:29%;right:9%;border-width:3px 3px 0 0;border-radius:0 12px 0 0}.c2{top:29%;left:9%;border-width:3px 0 0 3px;border-radius:12px 0 0 0}.c3{bottom:29%;right:9%;border-width:0 3px 3px 0;border-radius:0 0 12px 0}.c4{bottom:29%;left:9%;border-width:0 0 3px 3px;border-radius:0 0 0 12px}.scan-line{position:absolute;z-index:3;left:14%;right:14%;top:50%;height:2px;border-radius:2px;background:#28e1e8;box-shadow:0 0 14px #28e1e8;animation:scan 1.65s ease-in-out infinite alternate}@keyframes scan{from{transform:translateY(-72px)}to{transform:translateY(72px)}}.scan-hint{position:absolute;z-index:4;left:50%;bottom:16px;transform:translateX(-50%);background:rgba(15,23,42,.72);backdrop-filter:blur(7px);color:#fff;padding:7px 11px;border-radius:999px;font-size:10px;white-space:nowrap}.camera-controls{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;padding:11px;background:#fff;border-top:1px solid var(--border)}#torchBtn.active{background:#fff6cf;border-color:#eed66c;color:#7a5b00}.tips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.tip{min-height:74px;border:1px solid #e0e7ed;border-radius:11px;background:#fafcfd;padding:9px;text-align:center}.tip b{display:block;font-size:11px}.tip small{display:block;color:var(--muted);font-size:9px;line-height:1.7;margin-top:3px}.scan-result{position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:30;max-width:640px;margin:auto;background:#fff;border:1px solid var(--border);border-radius:14px;padding:11px 13px;box-shadow:0 16px 44px rgba(0,0,0,.19)}.scan-result b,.scan-result small{display:block}.scan-result b{font-size:12px}.scan-result small{font-size:10px;color:var(--muted);margin-top:3px}.scan-result.ok{border-color:#91d5aa}.scan-result.bad{border-color:#efaaa5}.camera-active .viewer{box-shadow:inset 0 0 0 1px rgba(37,214,223,.18)}
+@media(max-width:560px){body{padding-inline:9px}.topbar{padding-top:7px}.brand-logo{width:42px;height:42px}.brand h1{font-size:16px}.secure-badge{display:none}.link-row{grid-template-columns:1fr}.pair-buttons .btn{flex:1}.viewer,.viewer video{min-height:335px;height:56vh}.camera-controls{grid-template-columns:1fr 1fr}.camera-controls #startScannerBtn{grid-column:1/-1}.tips{grid-template-columns:1fr}.tip{min-height:auto;text-align:right}.card{border-radius:14px}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="topbar">
+    <div class="brand"><img class="brand-logo" src="brand-logo.png?v=7840" alt=""><div><h1>قارئ باركود الميزان</h1><p>كاميرا جوال مرتبطة مباشرة بالكاشير</p></div></div>
+    <span class="secure-badge">اتصال آمن</span>
+  </header>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title"><span class="icon">↔</span><div><h2>حالة الربط</h2><small>يرسل الباركود للكاشير فور قراءته</small></div></div></div>
+    <div class="card-body">
+      <div class="link-row">
+        <div id="linkStatus" class="scanner-link-status"><b id="linkStatusText">جاري التهيئة...</b></div>
+        <div class="pair-buttons"><button id="scanPairBtn" class="btn btn-primary">مسح QR الربط</button><button id="forgetPairBtn" class="btn btn-danger">إلغاء الربط</button></div>
+      </div>
+      <p class="note">امسح QR الظاهر في الإعدادات مرة واحدة. بعد ظهور «تم الربط» يفتح ماسح المنتجات تلقائيًا. يجب تشغيل الصفحة عبر HTTPS حتى يسمح المتصفح باستخدام الكاميرا.</p>
+    </div>
+  </section>
+
+  <section class="card camera-card">
+    <div class="viewer">
+      <video id="scannerVideo" playsinline muted></video>
+      <div class="camera-overlay"><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i><span class="scan-line"></span></div>
+      <span class="scan-hint">ضع الباركود داخل الإطار</span>
+    </div>
+    <div class="camera-controls"><button id="startScannerBtn" class="btn btn-primary">تشغيل ماسح المنتجات</button><button id="stopScannerBtn" class="btn btn-secondary" hidden>إيقاف الكاميرا</button><button id="torchBtn" class="btn btn-secondary" hidden>الفلاش</button></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title"><span class="icon">✓</span><div><h2>لأفضل قراءة</h2><small>نصائح بسيطة لسرعة أعلى</small></div></div></div>
+    <div class="card-body"><div class="tips"><div class="tip"><b>إضاءة واضحة</b><small>وجّه الكاميرا بعيدًا عن الانعكاس المباشر.</small></div><div class="tip"><b>مسافة مناسبة</b><small>اترك الباركود كاملًا داخل الإطار.</small></div><div class="tip"><b>اتصال ثابت</b><small>يفضل إبقاء الجوال والكاشير على نفس الشبكة.</small></div></div></div>
+  </section>
+</main>
+<div id="scanResult" class="scan-result" hidden></div>
+<script src="phone-scanner-v783.js?v=7840"></script>
+<script>if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./service-worker.js?v=7840',{updateViaCache:'none'}).catch(()=>{});</script>
+</body>
+</html>

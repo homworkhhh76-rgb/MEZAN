@@ -90,7 +90,24 @@
   async function prepareActivationDownload(payload,fileName){const made=await makeFile(payload),name=activationFileName(payload,fileName),blob=new Blob([made.opaque],{type:'application/octet-stream'}),url=URL.createObjectURL(blob);return{payload:made.value,made,name,url,createdAt:Date.now()}}
   function triggerPreparedActivationDownload(prepared){if(!prepared?.url)throw new Error('ملف الدخول غير جاهز للتنزيل.');const a=document.createElement('a');a.href=prepared.url;a.download=prepared.name||'AlMeezan-login.mzauth';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>{try{URL.revokeObjectURL(prepared.url)}catch(_){ }prepared.url=''},60000);return prepared.made}
   async function downloadActivationFile(payload,fileName){const prepared=await prepareActivationDownload(payload,fileName);triggerPreparedActivationDownload(prepared);return prepared.made}
-  async function parseActivationFile(file){if(!file)throw new Error('اختر ملف التفعيل أولاً.');if(!/\.mzauth$/i.test(file.name||''))throw new Error('امتداد الملف غير معتمد. استخدم ملف .mzauth');const text=(await file.text()).trim();if(!text)throw new Error('ملف التفعيل فارغ.');const p=await unpackOpaque(text);if(p.expiresAt&&Date.now()>=new Date(p.expiresAt).getTime())throw new Error('انتهت صلاحية ملف التفعيل.');return p}
+  const activationFileTextCache=new WeakMap(),activationFilePayloadCache=new WeakMap();
+  async function readActivationFileText(file){
+    if(!file)throw new Error('اختر ملف التفعيل أولاً.');
+    if(activationFileTextCache.has(file))return activationFileTextCache.get(file);
+    let lastError=null,text='';
+    // FileReader is more reliable with Android/Samsung document providers when the selected file is read immediately.
+    try{text=await new Promise((resolve,reject)=>{const r=new FileReader();r.onerror=()=>reject(r.error||new Error('تعذر قراءة الملف.'));r.onabort=()=>reject(new Error('تم إلغاء قراءة الملف.'));r.onload=()=>resolve(String(r.result||''));r.readAsText(file)});}catch(e){lastError=e}
+    if(!text){try{text=dec.decode(new Uint8Array(await file.arrayBuffer()))}catch(e){lastError=e}}
+    if(!text){try{text=await file.text()}catch(e){lastError=e}}
+    text=String(text||'').trim();
+    if(!text){const raw=String(lastError?.message||lastError||'');if(/requested file|directory could not be found|notfound|not found/i.test(raw))throw new Error('تعذر الوصول إلى ملف التفعيل بعد اختياره من مدير الملفات. اختر الملف مرة أخرى من مجلد التنزيلات أو الملفات، وسيتم نسخه إلى الذاكرة فور اختياره.');throw new Error('تعذر قراءة ملف التفعيل أو أن الملف فارغ.');}
+    activationFileTextCache.set(file,text);return text;
+  }
+  async function primeActivationFile(file){
+    if(!file)return null;if(!/\.mzauth$/i.test(file.name||''))throw new Error('امتداد الملف غير معتمد. استخدم ملف .mzauth');
+    const text=await readActivationFileText(file),payload=await unpackOpaque(text);activationFilePayloadCache.set(file,payload);return payload;
+  }
+  async function parseActivationFile(file){if(!file)throw new Error('اختر ملف التفعيل أولاً.');if(!/\.mzauth$/i.test(file.name||''))throw new Error('امتداد الملف غير معتمد. استخدم ملف .mzauth');const p=activationFilePayloadCache.get(file)||await primeActivationFile(file);if(p.expiresAt&&Date.now()>=new Date(p.expiresAt).getTime())throw new Error('انتهت صلاحية ملف التفعيل.');return p}
 
   const scopedDbKey=id=>`${LOCAL_DB_ACCESS_KEY}::${encodeURIComponent(safe(id)||'current')}`;
   function saveDatabaseAccess(db,meta={}){const identity=safe(meta.companyId||meta.tenantId||readRuntime()?.companyId),cfg={databaseURL:safe(db?.databaseURL),authToken:safe(db?.authToken),table:safe(db?.table||'almezan_rtdb'),companyId:identity,tenantId:identity,savedAt:Date.now()};if(!cfg.databaseURL||!cfg.authToken)throw new Error('بيانات قاعدة الشركة غير مكتملة.');const wrapped=wrapText(JSON.stringify(cfg));localStorage.setItem(LOCAL_DB_ACCESS_KEY,wrapped);if(identity)localStorage.setItem(scopedDbKey(identity),wrapped);return cfg}
@@ -177,5 +194,5 @@
   async function rotateCompanyManagerFile(fileName=''){const prepared=await prepareCompanyManagerFileRotation(fileName);triggerPreparedActivationDownload(prepared);return prepared}
 
 
-  window.AlMezanActivation={version:2,makeFile,prepareActivationDownload,triggerPreparedActivationDownload,downloadActivationFile,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,verifyCompanyAccessRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,prepareCompanyManagerFileRotation,rotateCompanyManagerFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
+  window.AlMezanActivation={version:3,makeFile,prepareActivationDownload,triggerPreparedActivationDownload,downloadActivationFile,primeActivationFile,readActivationFileText,parseActivationFile,activatePayload,readRuntime,clearRuntime,saveDatabaseAccess,readDatabaseAccess,saveMasterConfig,readMasterConfig,clearMasterConfig,sealObject,openObject,tursoDirect,verifyPayload,verifyPayloadRemote,verifyCompanyAccessRemote,cachedVerification,markVerified,buildRolePayload,prepareVerifiedRoleFile,prepareCompanyManagerFileRotation,rotateCompanyManagerFile,constants:{APP_TAG,RUNTIME_KEY,MASTER_KEY,LOCAL_DB_ACCESS_KEY,VERIFIED_KEY}};
 })();

@@ -1,14 +1,14 @@
-const BUILD='7816';
+const BUILD='7840';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v7816-cashier-customer-search-fix`;
-const IMAGE_CACHE=`almezan-images-${SCOPE_KEY}-v7816`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v7840-sync-settings-redesign`;
+const IMAGE_CACHE=`almezan-images-${SCOPE_KEY}-v7840`;
 const PAGE_FILES=[
-  './index.html','./print-invoice.html','./dashboard.html','./cashier.html','./sales.html','./purchases.html','./debts.html','./installments.html','./products.html','./stock.html','./units.html','./transfers.html','./barcodes.html','./accounts.html','./vouchers.html','./cheques.html','./journals.html','./expenses.html','./reports.html','./customers.html','./customer-groups.html','./price-groups.html','./suppliers.html','./representatives.html','./messaging.html','./branches.html','./warehouses.html','./employees.html','./audit.html','./settings.html','./README.html','./admin.html'
+  './index.html','./print-invoice.html','./dashboard.html','./cashier.html','./sales.html','./purchases.html','./debts.html','./installments.html','./products.html','./stock.html','./units.html','./transfers.html','./barcodes.html','./accounts.html','./vouchers.html','./cheques.html','./journals.html','./expenses.html','./reports.html','./customers.html','./customer-groups.html','./price-groups.html','./suppliers.html','./representatives.html','./messaging.html','./branches.html','./warehouses.html','./employees.html','./audit.html','./settings.html','./README.html','./admin.html','./mobile-scanner.html'
 ];
 const ASSET_FILES=[
-  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./pages-bundle-v754.js?v='+BUILD,'./enterprise-v750.js?v='+BUILD,'./enterprise-v752.js?v='+BUILD,'./enterprise-v753.js?v='+BUILD,'./enterprise-v754.js?v='+BUILD,'./enterprise-v755.js?v='+BUILD,'./enterprise-v757.js?v='+BUILD,'./enterprise-v758.js?v='+BUILD,'./enterprise-v770.js?v='+BUILD,'./enterprise-v771.js?v='+BUILD,'./enterprise-v772.js?v='+BUILD,'./cashier-v777-hotfix.js?v='+BUILD,'./cashier-v7816-searchfix.js?v='+BUILD,'./document-export-v7815.js?v='+BUILD,'./master-admin.js?v='+BUILD,
+  './app.css?v='+BUILD,'./activation-runtime.js?v='+BUILD,'./app.js?v='+BUILD,'./bluetooth-printer.js?v='+BUILD,'./almezan-sync.js?v='+BUILD,'./pages-bundle-v754.js?v='+BUILD,'./enterprise-v750.js?v='+BUILD,'./enterprise-v752.js?v='+BUILD,'./enterprise-v753.js?v='+BUILD,'./enterprise-v754.js?v='+BUILD,'./enterprise-v755.js?v='+BUILD,'./enterprise-v757.js?v='+BUILD,'./enterprise-v758.js?v='+BUILD,'./enterprise-v770.js?v='+BUILD,'./enterprise-v771.js?v='+BUILD,'./enterprise-v772.js?v='+BUILD,'./cashier-v777-hotfix.js?v='+BUILD,'./cashier-v7816-searchfix.js?v='+BUILD,'./document-export-v7815.js?v='+BUILD,'./printer-manager-v782.js?v='+BUILD,'./enterprise-v783.js?v='+BUILD,'./settings-v784.js?v='+BUILD,'./phone-scanner-v783.js?v='+BUILD,'./master-admin.js?v='+BUILD,
   './views.js?v='+BUILD,'./admin.js?v='+BUILD,'./pricing.js?v='+BUILD,'./cashier.js?v='+BUILD,'./enterprise.js?v='+BUILD,'./advanced.js?v='+BUILD,'./finance-pro.js?v='+BUILD,'./inventory-restaurant.js?v='+BUILD,'./variants-pro.js?v='+BUILD,'./variant-transfer.js?v='+BUILD,
-  './app-icon-192.png?v='+BUILD,'./app-icon-512.png?v='+BUILD,'./app-icon.svg?v='+BUILD,'./brand-logo.png?v='+BUILD,'./barcode-scan.mp3?v='+BUILD,'./manifest.webmanifest?v='+BUILD
+  './scanner-manifest.webmanifest?v='+BUILD,'./app-icon-192.png?v='+BUILD,'./app-icon-512.png?v='+BUILD,'./app-icon.svg?v='+BUILD,'./brand-logo.png?v='+BUILD,'./barcode-scan.mp3?v='+BUILD,'./manifest.webmanifest?v='+BUILD
 ];
 const FILES=[...PAGE_FILES,...ASSET_FILES];
 const cacheable=r=>!!r&&(r.ok||r.type==='opaque');
