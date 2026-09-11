@@ -1,19 +1,30 @@
-/* Al-Meezan Pro v7.83 — expiry/wastage + phone camera bridge. Additive layer only. */
+/* Al-Meezan Pro v7.84.3 — expiry/wastage + fixed 6-digit phone scanner link. */
 (()=>{
 'use strict';
-const A=window.AlMezan;if(!A)return;const S=A.state,D=()=>A.db,num=A.num,esc=A.esc;
-const PHONE_KEY='almezan_phone_scanner_v783';
-let hostPeer=null,hostConn=null,hostReadyPromise=null,hostAuthenticated=false,hostDirectAuthenticated=false,relayClient=null,relayTopic='',relayAuthenticated=false,relayReadyPromise=null,relayBrokerIndex=0,relayReconnectTimer=0;
+const A=window.AlMezan;if(!A)return;
+const S=A.state,D=()=>A.db,num=A.num,esc=A.esc;
+const PHONE_KEY='almezan_phone_scanner_6digit_v7843';
 const css=`
-#phoneScannerSettingsV783{scroll-margin-top:78px}.phone-scanner-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.phone-scanner-dot{width:9px;height:9px;border-radius:50%;background:#9ca3af;box-shadow:0 0 0 3px rgba(156,163,175,.14)}.phone-scanner-status.connected .phone-scanner-dot{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.14)}.phone-scanner-status.connecting .phone-scanner-dot{background:#d97706}.phone-scanner-status.error .phone-scanner-dot{background:#dc2626}.phone-scanner-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.phone-scanner-note{font-size:12px;line-height:1.8;color:var(--muted,#697587);margin-top:8px}.phone-pair-box{display:grid;grid-template-columns:minmax(190px,230px) 1fr;gap:18px;align-items:center}.phone-pair-qr{background:#fff;border:1px solid #dce3ea;border-radius:16px;padding:12px;display:grid;place-items:center}.phone-pair-qr svg{width:100%;height:auto;display:block}.phone-pair-copy h3{margin:0 0 8px;font-size:17px}.phone-pair-copy p{margin:4px 0;font-size:13px;line-height:1.8}.phone-pair-status{margin-top:10px;padding:9px 11px;border:1px solid #dce3ea;border-radius:10px;background:#f8fafc}.expiry-alert-group{border:1px solid rgba(220,38,38,.18);border-radius:12px;overflow:hidden;margin-bottom:10px}.expiry-alert-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;background:rgba(220,38,38,.06)}.expiry-alert-item{border-top:1px solid rgba(220,38,38,.1)}.purchase-lines-table .pur-line-expiry{min-width:138px}.purchase-lines-table .pur-line-batch{min-width:110px}.purchase-add-row{align-items:end}
-@media(max-width:700px){.phone-pair-box{grid-template-columns:1fr}.phone-pair-qr{max-width:250px;margin:auto}.expiry-alert-toolbar{align-items:stretch;flex-direction:column}.expiry-alert-item{align-items:flex-start;flex-wrap:wrap}.expiry-alert-item .btn{margin-inline-start:auto}}
+#phoneScannerSettingsV783{scroll-margin-top:78px}
+.phone-scanner-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.phone-scanner-dot{width:9px;height:9px;border-radius:50%;background:#9ca3af;box-shadow:0 0 0 3px rgba(156,163,175,.14)}
+.phone-scanner-status.connected .phone-scanner-dot{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.14)}
+.phone-scanner-status.connecting .phone-scanner-dot{background:#d97706}
+.phone-scanner-status.error .phone-scanner-dot{background:#dc2626}
+.phone-scanner-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.phone-scanner-note{font-size:12px;line-height:1.8;color:var(--muted,#697587);margin-top:8px}
+.phone-code-wrap{display:grid;grid-template-columns:minmax(180px,260px) auto;gap:8px;align-items:end}
+.phone-six-code{direction:ltr!important;text-align:center!important;letter-spacing:7px!important;font-weight:800!important;font-size:18px!important}
+.phone-pair-status{margin-top:10px;padding:9px 11px;border:1px solid #dce3ea;border-radius:10px;background:#f8fafc}
+.expiry-alert-group{border:1px solid rgba(220,38,38,.18);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.expiry-alert-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;background:rgba(220,38,38,.06)}
+.expiry-alert-item{border-top:1px solid rgba(220,38,38,.1)}
+.purchase-lines-table .pur-line-expiry{min-width:138px}.purchase-lines-table .pur-line-batch{min-width:110px}.purchase-add-row{align-items:end}
+@media(max-width:700px){.phone-code-wrap{grid-template-columns:1fr}.expiry-alert-toolbar{align-items:stretch;flex-direction:column}.expiry-alert-item{align-items:flex-start;flex-wrap:wrap}.expiry-alert-item .btn{margin-inline-start:auto}}
 `;
 const style=document.createElement('style');style.textContent=css;document.head.appendChild(style);
-function uidPart(){try{return crypto.randomUUID().replace(/-/g,'').slice(0,18)}catch(_){return Math.random().toString(36).slice(2)+Date.now().toString(36)}}
 function loadPhone(){try{return JSON.parse(localStorage.getItem(PHONE_KEY)||'{}')}catch(_){return{}}}
-function savePhone(patch){const next={...loadPhone(),...patch,updatedAt:Date.now()};localStorage.setItem(PHONE_KEY,JSON.stringify(next));updatePhoneUi();return next}
-function safeSend(conn,data){try{if(conn?.open)conn.send(data)}catch(_){}}
-function updatePhoneUi(){const st=phoneStatus(),markup=`<span class="phone-scanner-dot"></span><b>${esc(st.label)}</b>`;document.querySelectorAll('[data-phone-scanner-status]').forEach(el=>{const cls=`phone-scanner-status ${st.tone}`.trim();if(el.className!==cls)el.className=cls;if(el.innerHTML!==markup)el.innerHTML=markup});const modal=document.querySelector('#phonePairLiveStatus');if(modal){const cls=`phone-pair-status phone-scanner-status ${st.tone}`.trim();if(modal.className!==cls)modal.className=cls;if(modal.innerHTML!==markup)modal.innerHTML=markup}}
+function savePhone(patch){const next={...loadPhone(),...patch,updatedAt:Date.now()};localStorage.setItem(PHONE_KEY,JSON.stringify(next));try{updatePhoneUi()}catch(_){}return next}
 function branchExpiredLots(){const d=D(),ids=new Set((d.warehouses||[]).filter(w=>!S.activeBranchId||w.branchId===S.activeBranchId).map(w=>w.id));return(d.productBatches||[]).filter(b=>ids.has(b.warehouseId)&&b.expiryDate&&b.expiryDate<A.today()&&num(b.qtyBase)>0)}
 function ensureInventoryCollections(){const d=D();d.productBatches=d.productBatches||[];d.wastageDocs=d.wastageDocs||[];d.sequences=d.sequences||{};d.sequences.wastage=num(d.sequences.wastage)||0}
 function disposeExpired(ids=null){ensureInventoryCollections();const d=D(),wanted=ids?new Set(ids):null,lots=branchExpiredLots().filter(l=>!wanted||wanted.has(l.id));if(!lots.length){A.toast('لا توجد كميات منتهية قابلة للإتلاف.','warning');return false}
@@ -26,46 +37,302 @@ function disposeExpired(ids=null){ensureInventoryCollections();const d=D(),wante
 A.registerAction('v783-expire-all-wastage',()=>A.confirmDialog('إضافة كل المنتهي للتالف','سيتم إنشاء سند/سندات إتلاف وخصم الكميات المنتهية من المخزون وترحيل تكلفتها محاسبياً.',()=>disposeExpired()));
 A.registerAction('v783-expire-lot-wastage',b=>{const lot=(D().productBatches||[]).find(x=>x.id===b.dataset.id),p=D().products.find(x=>x.id===lot?.productId);if(!lot)return;A.confirmDialog('إضافة للتالف',`سيتم خصم الكمية المنتهية من ${p?.name||'الصنف'} ونقلها إلى سجل التالف.`,()=>disposeExpired([lot.id]))});
 
-function loadScript(urls,check,key){if(check())return Promise.resolve(check());if(window[key])return window[key];window[key]=(async()=>{let last;for(const src of urls){try{await new Promise((resolve,reject)=>{const el=document.createElement('script');el.src=src;el.async=true;el.crossOrigin='anonymous';el.onload=resolve;el.onerror=reject;document.head.appendChild(el)});if(check())return check()}catch(e){last=e}}throw last||Error('تعذر تحميل مكتبة الاتصال')})().finally(()=>window[key]=null);return window[key]}
-function loadPeerJs(){return loadScript(['https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js','https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'],()=>window.Peer,'__almezanPeerLoading')}
-function loadMqttJs(){return loadScript(['https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js','https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js'],()=>window.mqtt?.connect?window.mqtt:null,'__almezanMqttLoading')}
-const RELAY_BROKERS=['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt'];
-const ICE_SERVERS=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.relay.metered.ca:80'}];
-const _te=new TextEncoder(),_td=new TextDecoder(),recentScanIds=new Map();
-function b64Text(s){const bytes=_te.encode(String(s||''));let bin='';for(const b of bytes)bin+=String.fromCharCode(b);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-function bytesToB64u(bytes){let bin='';for(const b of bytes)bin+=String.fromCharCode(b);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-function b64uToBytes(s){s=String(s).replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s),out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out}
-async function digestBytes(v){return new Uint8Array(await crypto.subtle.digest('SHA-256',_te.encode(String(v))))}
-async function relayBase(cfg){const d=await digestBytes(`${cfg.hostId}|${cfg.pairToken}|almezan-relay-v7842`);return 'almezan/v7842/'+[...d.slice(0,18)].map(b=>b.toString(16).padStart(2,'0')).join('')}
-async function relayKey(token){const d=await digestBytes(`${token}|almezan-relay-key-v7842`);return crypto.subtle.importKey('raw',d,{name:'AES-GCM'},false,['encrypt','decrypt'])}
-async function relayEncode(obj,token){const iv=crypto.getRandomValues(new Uint8Array(12)),key=await relayKey(token),plain=_te.encode(JSON.stringify(obj)),ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,plain)),all=new Uint8Array(iv.length+ct.length);all.set(iv);all.set(ct,iv.length);return bytesToB64u(all)}
-async function relayDecode(raw,token){const all=b64uToBytes(String(raw)),iv=all.slice(0,12),ct=all.slice(12),key=await relayKey(token),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);return JSON.parse(_td.decode(plain))}
-function makeHostConfig(regenerate=false){let c=loadPhone();if(regenerate||!c.hostId||!c.pairToken)c=savePhone({hostId:`almezan-${uidPart()}`,pairToken:uidPart()+uidPart(),pairedAt:regenerate?'':c.pairedAt||'',remotePeer:'',lastError:''});return c}
-function phoneStatus(){if(hostDirectAuthenticated&&hostConn?.open)return{tone:'connected',label:'متصلة — اتصال مباشر'};if(relayAuthenticated&&relayClient?.connected)return{tone:'connected',label:'متصلة — عبر الإنترنت'};if((hostPeer&&!hostPeer.destroyed)||relayClient||relayReadyPromise)return{tone:'connecting',label:'بانتظار كاميرا الجوال'};const c=loadPhone();return c.lastError?{tone:'error',label:'غير متصلة'}:{tone:'',label:c.pairedAt?'غير متصلة — يمكن إعادة الربط':'لم يتم ربط كاميرا جوال'}}
-function destroyHost(){clearTimeout(relayReconnectTimer);try{hostConn?.close?.()}catch(_){}try{hostPeer?.destroy?.()}catch(_){}try{relayClient?.end?.(true)}catch(_){}hostConn=null;hostPeer=null;hostReadyPromise=null;hostAuthenticated=false;hostDirectAuthenticated=false;relayClient=null;relayTopic='';relayAuthenticated=false;relayReadyPromise=null;updatePhoneUi()}
-async function relaySend(data){const cfg=loadPhone();if(!relayClient?.connected||!relayTopic||!cfg.pairToken)return false;try{const payload=await relayEncode(data,cfg.pairToken);relayClient.publish(relayTopic+'/to-scanner',payload,{qos:0,retain:false});return true}catch(_){return false}}
-function scheduleRelayHost(){clearTimeout(relayReconnectTimer);const c=loadPhone();if(!c.hostId||!c.pairToken)return;relayReconnectTimer=setTimeout(()=>ensureRelayHost(c).catch(()=>scheduleRelayHost()),3500)}
-async function ensureRelayHost(cfg=makeHostConfig(false)){if(!crypto?.subtle)return false;if(relayClient?.connected&&relayTopic)return true;if(relayReadyPromise)return relayReadyPromise;relayReadyPromise=(async()=>{const mq=await loadMqttJs(),base=await relayBase(cfg);relayTopic=base;for(let off=0;off<RELAY_BROKERS.length;off++){const idx=(relayBrokerIndex+off)%RELAY_BROKERS.length,broker=RELAY_BROKERS[idx];try{const client=await new Promise((resolve,reject)=>{let done=false;const c=mq.connect(broker,{clientId:'almezan-h-'+Math.random().toString(16).slice(2)+Date.now().toString(36),clean:true,connectTimeout:6500,reconnectPeriod:0,keepalive:20,protocolVersion:4});const t=setTimeout(()=>{if(done)return;done=true;try{c.end(true)}catch(_){}reject(Error('relay timeout'))},7500);c.once('connect',()=>{if(done)return;done=true;clearTimeout(t);resolve(c)});c.once('error',e=>{if(done)return;done=true;clearTimeout(t);try{c.end(true)}catch(_){}reject(e)})});relayClient=client;relayBrokerIndex=idx;await new Promise((resolve,reject)=>client.subscribe(base+'/to-host',{qos:0},e=>e?reject(e):resolve()));client.on('message',async(topic,payload)=>{if(topic!==base+'/to-host')return;try{const msg=await relayDecode(payload.toString(),cfg.pairToken);handlePhoneMessage(msg,'relay',null)}catch(_){}});client.on('close',()=>{relayAuthenticated=false;updatePhoneUi();scheduleRelayHost()});client.on('error',()=>{});updatePhoneUi();return true}catch(_){continue}}throw Error('تعذر تشغيل الربط الاحتياطي عبر الإنترنت')})().finally(()=>relayReadyPromise=null);return relayReadyPromise}
-async function ensureDirectHost(cfg=makeHostConfig(false)){if(hostPeer&&!hostPeer.destroyed&&hostPeer.open)return hostPeer;if(hostReadyPromise)return hostReadyPromise;hostReadyPromise=(async()=>{const Peer=await loadPeerJs();const peer=new Peer(cfg.hostId,{debug:0,config:{iceServers:ICE_SERVERS,sdpSemantics:'unified-plan'}});hostPeer=peer;peer.on('connection',acceptConnection);peer.on('disconnected',()=>{hostDirectAuthenticated=false;hostAuthenticated=relayAuthenticated;updatePhoneUi()});peer.on('close',()=>{hostDirectAuthenticated=false;hostAuthenticated=relayAuthenticated;updatePhoneUi()});const opened=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('انتهت مهلة الاتصال المباشر.')),11000);peer.once('open',id=>{clearTimeout(t);resolve(id)});peer.once('error',err=>{clearTimeout(t);reject(err)})});savePhone({lastError:'',hostId:opened||cfg.hostId});updatePhoneUi();return hostPeer})().finally(()=>hostReadyPromise=null);return hostReadyPromise}
-async function ensureHost(regenerate=false){if(regenerate)destroyHost();let cfg=makeHostConfig(regenerate);let results=await Promise.allSettled([ensureDirectHost(cfg),ensureRelayHost(cfg)]);const directErr=results[0].status==='rejected'?results[0].reason:null;if(directErr&&/taken|unavailable/i.test(String(directErr?.type||directErr?.message||''))&&!regenerate){destroyHost();cfg=makeHostConfig(true);results=await Promise.allSettled([ensureDirectHost(cfg),ensureRelayHost(cfg)])}if(results.every(x=>x.status==='rejected')){savePhone({lastError:'تعذر تشغيل الربط'});throw Error('تعذر تشغيل الاتصال المباشر أو الاتصال عبر الإنترنت')}savePhone({lastError:''});return hostPeer||relayClient}
-function sourceSend(via,conn,data){if(via==='direct'){safeSend(conn,data);return true}relaySend(data);return true}
-function seenScan(id){if(!id)return false;const now=Date.now();for(const [k,t] of recentScanIds)if(now-t>10000)recentScanIds.delete(k);if(recentScanIds.has(id))return true;recentScanIds.set(id,now);return false}
-function handlePhoneMessage(msg,via,conn){const cfg=loadPhone(),auth=via==='direct'?hostDirectAuthenticated:relayAuthenticated;if(!auth){if(msg?.type==='hello'&&String(msg.token||'')===String(cfg.pairToken||'')){if(via==='direct'){hostDirectAuthenticated=true;hostAuthenticated=true}else{relayAuthenticated=true;hostAuthenticated=true}savePhone({pairedAt:Date.now(),remotePeer:conn?.peer||cfg.remotePeer||'',lastError:'',autoResume:true});sourceSend(via,conn,{type:'paired',companyName:D().company?.name||'الميزان',at:Date.now(),via});updatePhoneUi();A.toast('تم ربط كاميرا الجوال بنجاح','success');return}sourceSend(via,conn,{type:'auth-error',message:'رمز الربط غير صحيح'});if(via==='direct')try{conn?.close?.()}catch(_){}return}
-  if(msg?.type==='ping'){sourceSend(via,conn,{type:'pong',at:Date.now()});return}
-  if(msg?.type==='barcode'){const code=String(msg.code||'').trim();if(!code||seenScan(msg.id))return;const hit=A.findProductByBarcode?.(code);if(S.view!=='cashier')A.navigate('cashier');setTimeout(()=>{let ok=false;try{ok=!!A.cashierAddScannedCode?.(code)}catch(e){console.error(e)}sourceSend(via,conn,{type:'scan-result',id:msg.id||'',ok,code,productName:hit?.product?.name||'',unitName:hit?.unit?.name||'',message:ok?'تمت الإضافة إلى الفاتورة':(hit?'تعذر إضافة الصنف إلى السلة':'الباركود غير مسجل'),at:Date.now()})},S.view==='cashier'?0:60)}
+
+function loadScript(urls,check,key){
+  if(check())return Promise.resolve(check());
+  if(window[key])return window[key];
+  window[key]=(async()=>{
+    let last;
+    for(const src of urls){
+      try{
+        await new Promise((resolve,reject)=>{
+          const el=document.createElement('script');
+          el.src=src;el.async=true;el.crossOrigin='anonymous';
+          el.onload=resolve;el.onerror=reject;document.head.appendChild(el);
+        });
+        if(check())return check();
+      }catch(e){last=e}
+    }
+    throw last||Error('تعذر تحميل محرك الربط');
+  })().finally(()=>window[key]=null);
+  return window[key];
 }
-function acceptConnection(conn){if(hostConn&&hostConn!==conn){try{hostConn.close()}catch(_){}}hostConn=conn;hostDirectAuthenticated=false;hostAuthenticated=relayAuthenticated;updatePhoneUi();let authTimer=setTimeout(()=>{if(!hostDirectAuthenticated)try{conn.close()}catch(_){}},8000);conn.on('open',()=>updatePhoneUi());conn.on('data',msg=>{if(msg?.type==='hello')clearTimeout(authTimer);handlePhoneMessage(msg,'direct',conn)});conn.on('close',()=>{if(hostConn===conn){hostConn=null;hostDirectAuthenticated=false;hostAuthenticated=relayAuthenticated;updatePhoneUi()}});conn.on('error',err=>{savePhone({lastError:String(err?.message||err||'خطأ اتصال')});updatePhoneUi()})}
-function scannerUrl(){const c=makeHostConfig(false),u=new URL('mobile-scanner.html',location.href);u.hash=new URLSearchParams({peer:c.hostId,token:c.pairToken}).toString();return u.href}
-function pairCode(){const c=makeHostConfig(false);return `MZPAIR1.${b64Text(c.hostId)}.${b64Text(c.pairToken)}`}
-async function openPairModal(regenerate=false){await ensureHost(regenerate);const code=pairCode(),qr=window.AlMezanPrinterManager?.qrSvg?.(code,260)||`<div style="word-break:break-all">${esc(code)}</div>`;A.openModal({title:'ربط كاميرا جوال',size:'modal-lg',hideSubmit:true,body:`<div class="phone-pair-box"><div class="phone-pair-qr">${qr}</div><div class="phone-pair-copy"><h3>ربط قارئ الجوال</h3><p>امسح رمز الربط من تطبيق القارئ.</p><p>يستخدم اتصالاً مباشراً سريعاً متى أمكن، ويتحول تلقائياً إلى اتصال إنترنت مشفر عند الحاجة.</p><div id="phonePairLiveStatus" class="phone-pair-status"></div><div class="phone-scanner-actions"><button type="button" class="btn btn-secondary" data-action="v783-phone-pair-new">رمز جديد</button><button type="button" class="btn btn-secondary" data-action="v783-phone-open-scanner">فتح القارئ</button></div></div></div>`});updatePhoneUi()}
-function mountPhoneSettings(root){if(!root||root.querySelector('#phoneScannerSettingsV783'))return;const form=root.querySelector('#settingsForm'),grid=form?.querySelector('.grid-equal');if(!grid)return;const section=document.createElement('section');section.id='phoneScannerSettingsV783';section.className='settings-section settings-subsection';section.innerHTML=`<div class="settings-section-head"><div><h3>كاميرا جوال كقارئ باركود</h3><small>ربط جوال ثانٍ بالـQR وإرسال الباركود مباشرة إلى الكاشير</small></div></div><div data-phone-scanner-status class="phone-scanner-status"></div><div class="phone-scanner-actions"><button type="button" class="btn btn-primary" data-action="v783-phone-pair">${A.I?.('camera',16)||''} ربط كاميرا جوال</button><button type="button" class="btn btn-secondary" data-action="v783-phone-reconnect">إعادة اتصال</button><button type="button" class="btn btn-danger btn-sm" data-action="v783-phone-unpair">إلغاء الربط</button></div><div class="phone-scanner-note">يبقى الربط فعالاً أثناء التنقل بين صفحات التطبيق لأن النظام SPA. بعد إعادة تحميل التطبيق يحاول استعادة جلسة الربط المحفوظة تلقائياً عندما تتوفر خدمة الإشارة.</div>`;grid.appendChild(section);A.injectIcons?.(section);updatePhoneUi();const nav=root.querySelector('.settings-v771-nav');if(nav&&!nav.querySelector('[data-setting-jump="كاميرا الجوال"]')){const b=document.createElement('button');b.type='button';b.dataset.settingJump='كاميرا الجوال';b.textContent='كاميرا الجوال';b.onclick=()=>section.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b)}}
-A.registerAction('v783-phone-pair',()=>openPairModal(false).catch(e=>A.toast(String(e?.message||e),'error',7000)));
-A.registerAction('v783-phone-pair-new',()=>{A.closeModal?.();openPairModal(true).catch(e=>A.toast(String(e?.message||e),'error',7000))});
-A.registerAction('v783-phone-open-scanner',()=>{const u=scannerUrl();window.open(u,'_blank','noopener')});
-A.registerAction('v783-phone-reconnect',()=>{destroyHost();ensureHost(false).then(()=>A.toast('تم تشغيل ربط كاميرا الجوال','success')).catch(e=>A.toast(String(e?.message||e),'error',7000))});
-A.registerAction('v783-phone-unpair',()=>A.confirmDialog('إلغاء ربط كاميرا الجوال','سيتم إبطال رمز الربط الحالي. يلزم مسح رمز جديد للاتصال مرة أخرى.',()=>{destroyHost();savePhone({hostId:`almezan-${uidPart()}`,pairToken:uidPart()+uidPart(),pairedAt:'',remotePeer:'',autoResume:false,lastError:''});A.toast('تم إلغاء الربط');A.renderCurrent()}));
-const baseSettings=A.state?.views?.settings;if(baseSettings)A.state.views.settings=root=>{baseSettings(root);try{mountPhoneSettings(root)}catch(e){console.error('Phone scanner settings mount failed',e);A.toast?.('تم فتح الإعدادات، لكن تعذر تحميل قسم كاميرا الجوال.','warning',5000)}};
-let phoneSettingsMountQueued=false;const phoneSettingsRoot=document.querySelector('#workspace')||document.body;const observer=new MutationObserver(()=>{if(S.view!=='settings'||phoneSettingsMountQueued)return;phoneSettingsMountQueued=true;requestAnimationFrame(()=>{phoneSettingsMountQueued=false;if(S.view!=='settings')return;try{mountPhoneSettings(document.querySelector('#workspace'));updatePhoneUi()}catch(e){console.error('Phone scanner settings observer failed',e)}})});observer.observe(phoneSettingsRoot,{childList:true,subtree:false});
-window.AlMezanPhoneScanner={openPairModal,ensureHost,disposeExpired,mountPhoneSettings,updateUi:updatePhoneUi,get status(){return phoneStatus()},get settings(){return loadPhone()}};
-setTimeout(()=>{const c=loadPhone();if(c.autoResume&&c.hostId&&c.pairToken)ensureHost(false).catch(()=>{})},1200);
+function loadPeerJs(){
+  return loadScript(
+    ['https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js','https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'],
+    ()=>window.Peer,
+    '__almezanPeerLoading'
+  );
+}
+const PEER_OPTIONS={
+  host:'0.peerjs.com',
+  port:443,
+  path:'/',
+  secure:true,
+  debug:0,
+  config:{
+    iceServers:[
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'},
+      {urls:'stun:stun2.l.google.com:19302'}
+    ],
+    sdpSemantics:'unified-plan'
+  }
+};
+const recentScanIds=new Map();
+let hostPeer=null,hostConn=null,hostReadyPromise=null,hostAuthenticated=false,hostStarting=false,hostCode='',hostRetryTimer=0,hostGeneration=0;
+
+function normalizeSixCode(v){return String(v||'').replace(/\D/g,'').slice(0,6)}
+function randomSixCode(){return String(Math.floor(100000+Math.random()*900000))}
+function ensurePhoneCode(){
+  let c=loadPhone(),code=normalizeSixCode(c.code);
+  if(!/^\d{6}$/.test(code)){
+    code=randomSixCode();
+    c=savePhone({code,enabled:true,pairedAt:'',lastError:''});
+  }
+  return code;
+}
+function phoneStatus(){
+  const c=loadPhone();
+  if(c.enabled===false)return{tone:'',label:'الربط متوقف'};
+  const code=ensurePhoneCode();
+  if(hostAuthenticated&&hostConn?.open)return{tone:'connected',label:`متصل — كود ${code}`};
+  if(hostPeer?.open)return{tone:'connecting',label:`جاهز — بانتظار القارئ على الكود ${code}`};
+  if(hostStarting)return{tone:'connecting',label:'جاري تشغيل ربط القارئ...'};
+  return c.lastError?{tone:'error',label:String(c.lastError)}:{tone:'',label:`غير متصل — الكود ${code}`};
+}
+function updatePhoneUi(){
+  const st=phoneStatus(),markup=`<span class="phone-scanner-dot"></span><b>${esc(st.label)}</b>`,code=ensurePhoneCode();
+  document.querySelectorAll('[data-phone-scanner-status]').forEach(el=>{
+    const cls=`phone-scanner-status ${st.tone}`.trim();
+    if(el.className!==cls)el.className=cls;
+    if(el.innerHTML!==markup)el.innerHTML=markup;
+  });
+  document.querySelectorAll('[data-phone-scanner-code]').forEach(el=>{
+    if(document.activeElement!==el&&el.value!==code)el.value=code;
+  });
+  const modal=document.querySelector('#phonePairLiveStatus');
+  if(modal){
+    const cls=`phone-pair-status phone-scanner-status ${st.tone}`.trim();
+    if(modal.className!==cls)modal.className=cls;
+    if(modal.innerHTML!==markup)modal.innerHTML=markup;
+  }
+}
+function destroyHost(){
+  ++hostGeneration;
+  clearTimeout(hostRetryTimer);
+  try{hostConn?.close?.()}catch(_){}
+  try{hostPeer?.destroy?.()}catch(_){}
+  hostConn=null;hostPeer=null;hostReadyPromise=null;hostAuthenticated=false;hostStarting=false;hostCode='';
+  updatePhoneUi();
+}
+function scheduleHostRetry(delay=3200){
+  clearTimeout(hostRetryTimer);
+  const c=loadPhone();
+  if(c.enabled===false)return;
+  hostRetryTimer=setTimeout(()=>ensureHost(false).catch(()=>scheduleHostRetry(Math.min(9000,delay+900))),delay);
+}
+function seenScan(id){
+  if(!id)return false;
+  const now=Date.now();
+  for(const [k,t] of recentScanIds)if(now-t>10000)recentScanIds.delete(k);
+  if(recentScanIds.has(id))return true;
+  recentScanIds.set(id,now);
+  return false;
+}
+function sendHost(data){try{if(hostConn?.open)hostConn.send(data)}catch(_){}}
+async function addPhoneScannedProduct(code,hit){
+  if(!hit?.product)return false;
+  if(S.view!=='cashier')A.navigate('cashier');
+  for(let i=0;i<8;i++){
+    try{
+      let ok=false;
+      if(typeof A.cashierAddProductDirect==='function')
+        ok=!!A.cashierAddProductDirect(hit.product.id,hit.unit?.id||hit.product.defaultCashierUnitId||'',1);
+      else if(typeof A.cashierAddScannedCode==='function')
+        ok=!!A.cashierAddScannedCode(code);
+      if(ok){try{A.playBarcodeSound?.()}catch(_){}return true}
+      if(typeof A.cashierAddProductDirect==='function'||typeof A.cashierAddScannedCode==='function')return false;
+    }catch(e){console.error('Phone scanner add failed',e)}
+    await new Promise(r=>setTimeout(r,80));
+  }
+  return false;
+}
+async function handleBarcodeMessage(msg){
+  const code=String(msg?.code||'').trim();
+  if(!code||seenScan(msg?.id))return;
+  const hit=A.findProductByBarcode?.(code);
+  if(!hit){
+    A.toast?.(`الباركود غير مسجل: ${code}`,'warning',3200);
+    sendHost({type:'scan-result',id:msg.id||'',ok:false,code,productName:'',unitName:'',message:'الباركود غير مسجل',at:Date.now()});
+    return;
+  }
+  const ok=await addPhoneScannedProduct(code,hit);
+  if(ok)A.toast?.(`تمت إضافة ${hit.product.name} إلى الفاتورة`,'success',1800);
+  sendHost({
+    type:'scan-result',id:msg.id||'',ok,code,
+    productName:hit.product?.name||'',unitName:hit.unit?.name||'',
+    message:ok?'تمت الإضافة إلى الفاتورة':'تعذر إضافة الصنف إلى السلة — راجع المخزون أو الوحدة',
+    at:Date.now()
+  });
+}
+function acceptConnection(conn,code){
+  if(hostConn&&hostConn!==conn){try{hostConn.close()}catch(_){}}
+  hostConn=conn;hostAuthenticated=false;updatePhoneUi();
+  let authTimer=setTimeout(()=>{if(!hostAuthenticated)try{conn.close()}catch(_){}},9000);
+  conn.on('open',()=>updatePhoneUi());
+  conn.on('data',msg=>{
+    if(!hostAuthenticated){
+      if(msg?.type==='hello'&&normalizeSixCode(msg.code||msg.room)===code){
+        clearTimeout(authTimer);hostAuthenticated=true;
+        savePhone({pairedAt:Date.now(),lastError:'',enabled:true});
+        sendHost({type:'paired',companyName:D().company?.name||'الميزان',at:Date.now()});
+        updatePhoneUi();A.toast('تم ربط قارئ الجوال بنجاح','success');
+        return;
+      }
+      sendHost({type:'auth-error',message:'كود الربط غير صحيح'});
+      try{conn.close()}catch(_){}
+      return;
+    }
+    if(msg?.type==='ping'){sendHost({type:'pong',at:Date.now()});return}
+    if(msg?.type==='barcode')handleBarcodeMessage(msg).catch(e=>{console.error('Phone scanner message failed',e);sendHost({type:'scan-result',id:msg?.id||'',ok:false,code:String(msg?.code||''),message:'تعذر معالجة الباركود',at:Date.now()})});
+  });
+  conn.on('close',()=>{
+    if(hostConn===conn){hostConn=null;hostAuthenticated=false;updatePhoneUi()}
+  });
+  conn.on('error',err=>{
+    savePhone({lastError:String(err?.message||err||'خطأ اتصال')});
+    updatePhoneUi();
+  });
+}
+async function ensureHost(force=false){
+  const cfg=loadPhone();
+  if(cfg.enabled===false)return false;
+  const code=ensurePhoneCode();
+  if(!force&&hostPeer?.open&&hostCode===code)return hostPeer;
+  if(hostReadyPromise&&!force)return hostReadyPromise;
+  if(force||hostCode!==code)destroyHost();
+  hostStarting=true;hostCode=code;savePhone({lastError:'',enabled:true});updatePhoneUi();
+  const gen=++hostGeneration;
+  hostReadyPromise=(async()=>{
+    const Peer=await loadPeerJs();
+    const roomId='sixlink-'+code;
+    const peer=new Peer(roomId,PEER_OPTIONS);
+    hostPeer=peer;
+    peer.on('connection',incoming=>{
+      if(gen!==hostGeneration){try{incoming.close()}catch(_){};return}
+      if(incoming?.metadata?.room&&normalizeSixCode(incoming.metadata.room)!==code){
+        try{incoming.close()}catch(_){}
+        return;
+      }
+      acceptConnection(incoming,code);
+    });
+    peer.on('disconnected',()=>{
+      if(gen!==hostGeneration)return;
+      hostAuthenticated=false;updatePhoneUi();
+      if(peer&&!peer.destroyed){try{peer.reconnect()}catch(_){}}
+    });
+    peer.on('close',()=>{
+      if(gen!==hostGeneration)return;
+      hostAuthenticated=false;hostStarting=false;updatePhoneUi();
+      scheduleHostRetry();
+    });
+    peer.on('error',err=>{
+      if(gen!==hostGeneration)return;
+      hostStarting=false;
+      const type=String(err?.type||'');
+      const msg=type==='unavailable-id'
+        ?'الكود مستخدم على جهاز كاشير آخر — غيّر الكود'
+        :String(err?.message||type||'تعذر تشغيل الربط');
+      savePhone({lastError:msg});updatePhoneUi();
+      if(type!=='unavailable-id')scheduleHostRetry();
+    });
+    await new Promise((resolve,reject)=>{
+      const t=setTimeout(()=>reject(Error('انتهت مهلة تشغيل ربط القارئ')),12000);
+      peer.once('open',()=>{clearTimeout(t);resolve()});
+      peer.once('error',err=>{if(err?.type==='unavailable-id'){clearTimeout(t);reject(err)}});
+    });
+    hostStarting=false;savePhone({lastError:'',enabled:true});updatePhoneUi();
+    return peer;
+  })().catch(err=>{
+    hostStarting=false;updatePhoneUi();throw err;
+  }).finally(()=>{hostReadyPromise=null});
+  return hostReadyPromise;
+}
+async function setPhoneCode(raw){
+  const code=normalizeSixCode(raw);
+  if(!/^\d{6}$/.test(code))throw Error('اكتب 6 أرقام بالضبط');
+  savePhone({code,enabled:true,pairedAt:'',lastError:''});
+  destroyHost();
+  await ensureHost(true);
+  updatePhoneUi();
+  return code;
+}
+function scannerUrl(){return new URL('mobile-scanner.html',location.href).href}
+function phoneSettingsMarkup(){
+  const code=ensurePhoneCode();
+  return `<div class="phone-code-wrap">
+    <label class="field"><span>كود الربط المحلي</span><input data-phone-scanner-code class="phone-six-code" inputmode="numeric" maxlength="6" value="${esc(code)}" autocomplete="off"></label>
+    <button type="button" class="btn btn-primary" data-action="v783-phone-code-save">حفظ وتشغيل</button>
+  </div>
+  <div data-phone-scanner-status class="phone-scanner-status"></div>
+  <div class="phone-scanner-actions">
+    <button type="button" class="btn btn-secondary" data-action="v783-phone-code-random">كود جديد</button>
+    <button type="button" class="btn btn-secondary" data-action="v783-phone-reconnect">إعادة اتصال</button>
+    <button type="button" class="btn btn-secondary" data-action="v783-phone-open-scanner">فتح القارئ</button>
+  </div>
+  <div class="phone-scanner-note">اكتب نفس 6 أرقام في تطبيق القارئ. الكود محفوظ محلياً على جهاز الكاشير ويمكن تغييره في أي وقت.</div>`;
+}
+function mountPhoneSettings(root){
+  if(!root||root.querySelector('#phoneScannerSettingsV783'))return;
+  const form=root.querySelector('#settingsForm'),grid=form?.querySelector('.grid-equal');
+  if(!grid)return;
+  const section=document.createElement('section');
+  section.id='phoneScannerSettingsV783';section.className='settings-section settings-subsection';
+  section.innerHTML=`<div class="settings-section-head"><div><h3>قارئ باركود الجوال</h3><small>ربط مباشر بكود ثابت من 6 أرقام</small></div></div>${phoneSettingsMarkup()}`;
+  grid.appendChild(section);A.injectIcons?.(section);updatePhoneUi();
+}
+A.registerAction('v783-phone-code-save',b=>{
+  const input=b?.closest?.('.s784-card,section,.modal-form')?.querySelector?.('[data-phone-scanner-code]')||document.querySelector('[data-phone-scanner-code]');
+  setPhoneCode(input?.value||'').then(code=>A.toast(`تم حفظ كود الربط ${code} وتشغيله`,'success')).catch(e=>A.toast(String(e?.message||e),'error',6000));
+});
+A.registerAction('v783-phone-code-random',b=>{
+  const code=randomSixCode(),input=b?.closest?.('.s784-card,section,.modal-form')?.querySelector?.('[data-phone-scanner-code]')||document.querySelector('[data-phone-scanner-code]');
+  if(input)input.value=code;
+  setPhoneCode(code).then(()=>A.toast(`تم اعتماد الكود الجديد ${code}`,'success')).catch(e=>A.toast(String(e?.message||e),'error',6000));
+});
+A.registerAction('v783-phone-pair',b=>{
+  const input=b?.closest?.('.s784-card,section')?.querySelector?.('[data-phone-scanner-code]')||document.querySelector('[data-phone-scanner-code]');
+  setPhoneCode(input?.value||ensurePhoneCode()).then(()=>A.toast('الربط جاهز — اكتب نفس الكود في القارئ','success')).catch(e=>A.toast(String(e?.message||e),'error',6000));
+});
+A.registerAction('v783-phone-open-scanner',()=>window.open(scannerUrl(),'_blank','noopener'));
+A.registerAction('v783-phone-reconnect',()=>{destroyHost();ensureHost(true).then(()=>A.toast('تم تشغيل ربط قارئ الجوال','success')).catch(e=>A.toast(String(e?.message||e),'error',7000))});
+A.registerAction('v783-phone-unpair',()=>A.confirmDialog('إيقاف ربط قارئ الجوال','سيبقى الكود محفوظاً محلياً ويمكن تشغيله لاحقاً.',()=>{
+  destroyHost();savePhone({enabled:false,lastError:'',pairedAt:''});A.toast('تم إيقاف الربط');updatePhoneUi();
+}));
+const baseSettings=A.state?.views?.settings;
+if(baseSettings)A.state.views.settings=root=>{
+  baseSettings(root);
+  try{mountPhoneSettings(root)}catch(e){console.error('Phone scanner settings mount failed',e)}
+};
+let phoneSettingsMountQueued=false;
+const phoneSettingsRoot=document.querySelector('#workspace')||document.body;
+const observer=new MutationObserver(()=>{
+  if(S.view!=='settings'||phoneSettingsMountQueued)return;
+  phoneSettingsMountQueued=true;
+  requestAnimationFrame(()=>{
+    phoneSettingsMountQueued=false;
+    if(S.view!=='settings')return;
+    try{mountPhoneSettings(document.querySelector('#workspace'));updatePhoneUi()}catch(e){console.error('Phone scanner settings observer failed',e)}
+  });
+});
+observer.observe(phoneSettingsRoot,{childList:true,subtree:false});
+window.AlMezanPhoneScanner={
+  ensureHost,disposeExpired,mountPhoneSettings,updateUi:updatePhoneUi,
+  getCode:ensurePhoneCode,setCode:setPhoneCode,restart:()=>ensureHost(true),
+  get status(){return phoneStatus()},
+  get settings(){return loadPhone()}
+};
+window.addEventListener('online',()=>{const c=loadPhone();if(c.enabled!==false)ensureHost(false).catch(()=>{})});
+setTimeout(()=>{const c=loadPhone();if(c.enabled!==false)ensureHost(false).catch(()=>{})},1100);
 })();
