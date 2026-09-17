@@ -1,942 +1,261 @@
-/* Al-Meezan Pro Sync v5.0
- * Fresh offline-first sync engine.
- * - Keeps the existing cloud paths/table, so old company data stays compatible.
- * - Sends only changed records (delta), including edits and tombstone deletes.
- * - Uses atomic stock deltas to avoid lost quantities when two devices work together.
- * - Polls only a tiny remote batch counter, then downloads rows only when it changed.
- * - Applies remote rows immediately to the in-memory DB and emits almezan:data-synced.
+/* Al-Meezan Offline Sync v4.0
+ * Live delta sync: cloud commits are ordered by a server-side batch inside one
+ * transaction, remote deltas are applied immediately to the in-memory DB, and
+ * the UI receives the exact changed datasets/records without reloading pages.
  */
 (() => {
   'use strict';
-
-  const VERSION = 5.0;
-  const META_PREFIX = 'almezan_sync_meta_v5::';
-  const PENDING_PREFIX = 'almezan_sync_pending_v5::';
-  const FAILED_PREFIX = 'almezan_sync_failed_v5::';
-  const MIGRATED_PREFIX = 'almezan_sync_migrated_v5::';
-  const LEGACY_META_KEYS = ['almezan_sync_meta_v4::', 'almezan_sync_meta_v3::'];
-  const LEGACY_PENDING_KEYS = ['almezan_sync_pending_v4::', 'almezan_sync_pending_v3::', 'almezan_sync_pending_v1::'];
-  const LEGACY_FAILED_KEYS = ['almezan_sync_failed_v4::'];
-  const DEVICE_KEY = 'almezan_device_id_v1';
-  const IDB_NAME = 'almezan_offline_v1';
-  const IDB_STORE = 'tenants';
-  const DB_SAVED_PREFIX = 'almezan_db_saved_at_v752::';
-
-  const PUSH_BATCH_SIZE = 36;
-  const IMPORT_PUSH_BATCH_SIZE = 64;
-  const PROBE_ACTIVE_CASHIER_MS = 1600;
-  const PROBE_ACTIVE_MS = 2400;
-  const PROBE_IDLE_MS = 7500;
-  const PROBE_VERY_IDLE_MS = 15000;
-  const ACTIVITY_WINDOW_MS = 35000;
-  const VERY_IDLE_WINDOW_MS = 180000;
-
-  let snapshot = null;
-  let initialized = false;
-  let suppress = false;
-  let busy = false;
-  let schemaTenant = '';
-  let syncTimer = null;
-  let retryTimer = null;
-  let probeTimer = null;
-  let retryAttempt = 0;
-  let lastProbeAt = 0;
-  let lastActivityAt = Date.now();
-  let lastRev = Date.now() * 1000;
-  let bc = null;
-
-  const safe = v => String(v ?? '').trim();
-  const clone = v => JSON.parse(JSON.stringify(v));
-  const runtime = () => window.AlMezanActivation?.readRuntime?.() || null;
-  const tenant = () => safe(runtime()?.companyId || runtime()?.tenantId);
-  const dbCfg = () => window.AlMezanActivation?.readDatabaseAccess?.(tenant()) || runtime()?.database || null;
-  const basePath = () => `almezan/companies/${encodeURIComponent(tenant())}/d`;
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-  function readJson(key, fallback) {
-    try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; }
-    catch (_) { return fallback; }
+  const META_PREFIX='almezan_sync_meta_v4::';
+  const PENDING_PREFIX='almezan_sync_pending_v4::';
+  const FAILED_PREFIX='almezan_sync_failed_v4::';
+  const LEGACY_META_PREFIX='almezan_sync_meta_v3::';
+  const LEGACY_PENDING_PREFIX='almezan_sync_pending_v3::';
+  const VERY_LEGACY_PENDING_PREFIX='almezan_sync_pending_v1::';
+  const DEVICE_KEY='almezan_device_id_v1';
+  const IDB_NAME='almezan_offline_v1',IDB_STORE='tenants',DB_SAVED_PREFIX='almezan_db_saved_at_v752::';
+  const REMOTE_ACTIVE_MS=5000,REMOTE_IDLE_MS=8000,CASHIER_ACTIVE_MS=1800,CASHIER_IDLE_MS=5000,PUSH_BATCH_SIZE=24,IMPORT_PUSH_BATCH_SIZE=48;
+  let snapshot=null,busy=false,suppress=false,initialized=false,timer=null,retryTimer=null,retryAttempt=0,lastProbeAt=0,lastActivityAt=Date.now(),schemaTenant='';
+  const safe=v=>String(v??'').trim();
+  const clone=v=>JSON.parse(JSON.stringify(v));
+  const runtime=()=>window.AlMezanActivation?.readRuntime?.()||null;
+  const tenant=()=>safe(runtime()?.companyId||runtime()?.tenantId);
+  const dbCfg=()=>window.AlMezanActivation?.readDatabaseAccess?.(tenant())||runtime()?.database||null;
+  const basePath=()=>`almezan/companies/${encodeURIComponent(tenant())}/d`;
+  function deviceId(){let id=localStorage.getItem(DEVICE_KEY);if(!id){id=(crypto.randomUUID?crypto.randomUUID():`DEV-${Date.now()}-${Math.random().toString(36).slice(2)}`);localStorage.setItem(DEVICE_KEY,id)}return id}
+  function hashText(text){let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
+  const stableJson=v=>JSON.stringify(v);
+  function recordKey(dataset,row,index=0){if(row&&typeof row==='object'){if(row.id!=null&&String(row.id)!=='')return String(row.id);if(dataset==='stock'&&row.productId&&row.warehouseId)return `${row.productId}::${row.warehouseId}`;if(dataset==='itemPrices')return `${row.productId||''}::${row.unitId||''}::${row.priceGroupId||''}`;if(dataset==='exchangeRates')return `${row.currencyId||''}::${row.date||''}`;if(row.code!=null&&String(row.code)!=='')return `code:${row.code}`;if(row.number!=null&&String(row.number)!=='')return `number:${row.number}`}return `_h_${hashText(stableJson(row))}_${index}`}
+  function snapshotDb(db){const out={};for(const [dataset,value] of Object.entries(db||{})){if(Array.isArray(value)){const map={};value.forEach((row,i)=>{const key=recordKey(dataset,row,i),h=hashText(stableJson(row));map[key]=(dataset==='stock'||dataset==='repStock')?{h,qty:Number(row?.qtyBase||0)}:h});out[dataset]={kind:'array',map}}else out[dataset]={kind:'value',map:{__value__:hashText(stableJson(value))}}}return out}
+  const snapHash=v=>v&&typeof v==='object'?v.h:v;
+  const snapQty=v=>v&&typeof v==='object'?Number(v.qty||0):0;
+  function metaKey(t=tenant()){return META_PREFIX+encodeURIComponent(t||'none')}
+  function pendingKey(t=tenant()){return PENDING_PREFIX+encodeURIComponent(t||'none')}
+  function failedKey(t=tenant()){return FAILED_PREFIX+encodeURIComponent(t||'none')}
+  function readJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_){return fallback}}
+  function readMeta(){return readJson(metaKey(),{protocol:4,records:{},remoteBatch:0,batchInitialized:false,lastPullAt:0,lastPushAt:0,lastSuccessAt:0})}
+  function writeMeta(m){try{localStorage.setItem(metaKey(),JSON.stringify(m))}catch(_){}}
+  function migrateLegacyQueue(){const t=tenant();if(!t)return;const pk=pendingKey(t);if(localStorage.getItem(pk))return;let old=readJson(LEGACY_PENDING_PREFIX+encodeURIComponent(t),{});if(!old||!Object.keys(old).length)old=readJson(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(t),{});if(old&&Object.keys(old).length)try{localStorage.setItem(pk,JSON.stringify(old))}catch(_){} }
+  function readPending(){migrateLegacyQueue();return readJson(pendingKey(),{})}
+  function writePending(p){try{localStorage.setItem(pendingKey(),JSON.stringify(p))}catch(_){}emitStatus()}
+  function readFailed(){return readJson(failedKey(),{})}
+  function writeFailed(p){try{localStorage.setItem(failedKey(),JSON.stringify(p))}catch(_){}emitStatus()}
+  function pkey(dataset,key){return dataset+'\u0001'+key}
+  function revNow(){return Date.now()*1000+Math.floor(Math.random()*900)}
+  function enqueue(dataset,key,deleted=false,rev=revNow(),extra={}){if(!tenant())return false;const p=readPending(),basePk=pkey(dataset,key),isStockDelta=extra.mode==='stockDelta',pk=isStockDelta?`${basePk}\u0001${rev}`:basePk,cur=p[pk];if(cur&&Number(cur.rev||0)>rev)return false;p[pk]={dataset,key,deleted:!!deleted,rev,deviceId:deviceId(),...extra};writePending(p);const m=readMeta();m.records[basePk]={...(m.records[basePk]||{}),rev,deleted:!!deleted};writeMeta(m);return true}
+  function pendingRevForRecord(pending,dataset,key){let rev=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key))rev=Math.max(rev,Number(op.rev||0));return rev}
+  function pendingQtyDelta(pending,dataset,key){let delta=0;for(const op of Object.values(pending||{}))if(op?.dataset===dataset&&String(op?.key)===String(key)&&op?.mode==='stockDelta')delta+=Number(op.delta||0);return Number(delta.toFixed(8))}
+  function pendingCount(){return Object.keys(readPending()).length}
+  function failedCount(){return Object.keys(readFailed()).length}
+  function emitStatus(extra={}){window.dispatchEvent(new CustomEvent('almezan:sync-status',{detail:{pending:pendingCount(),failed:failedCount(),online:navigator.onLine!==false,busy,...extra}}))}
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  async function retryRead(fn,attempts=2){let last;for(let i=0;i<attempts;i++){try{return await fn()}catch(e){last=e;if(navigator.onLine===false||i===attempts-1)break;await sleep(350*(i+1))}}throw last}
+  function clearRetry(){clearTimeout(retryTimer);retryTimer=null;retryAttempt=0}
+  function scheduleRetry(){if(!pendingCount()||navigator.onLine===false)return;clearTimeout(retryTimer);retryAttempt=Math.min(retryAttempt+1,6);const delay=Math.min(15000,1200*Math.pow(2,retryAttempt-1));emitStatus({state:'retrying',retryIn:delay});retryTimer=setTimeout(()=>{retryTimer=null;syncNow({manual:false,force:true,checkRemote:true}).catch(()=>{})},delay)}
+  function getRecord(db,dataset,key){const value=db?.[dataset];if(Array.isArray(value)){for(let i=0;i<value.length;i++)if(recordKey(dataset,value[i],i)===key)return value[i];return undefined}return key==='__value__'?value:undefined}
+  function applyRecord(db,dataset,key,value,deleted){if(key==='__value__'){if(deleted)delete db[dataset];else db[dataset]=clone(value);return}if(!Array.isArray(db[dataset]))db[dataset]=[];const arr=db[dataset],idx=arr.findIndex((row,i)=>recordKey(dataset,row,i)===key);if(deleted){if(idx>=0)arr.splice(idx,1)}else if(idx>=0)arr[idx]=clone(value);else arr.push(clone(value))}
+  function capture(db){if(suppress||!tenant())return 0;const next=snapshotDb(db);if(!initialized){snapshot=next;return 0}if(!snapshot){snapshot=next;mirrorDb(db).catch(()=>{});return 0}let changed=0;const datasets=new Set([...Object.keys(snapshot),...Object.keys(next)]);for(const dataset of datasets){const a=snapshot[dataset]?.map||{},b=next[dataset]?.map||{},keys=new Set([...Object.keys(a),...Object.keys(b)]);for(const key of keys){if(snapHash(a[key])===snapHash(b[key]))continue;if(dataset==='stock'||dataset==='repStock'){if(b[key]===undefined){if(enqueue(dataset,key,true))changed++;continue}const delta=Number((snapQty(b[key])-snapQty(a[key])).toFixed(8));if(Math.abs(delta)>1e-10&&enqueue(dataset,key,false,revNow(),{mode:'stockDelta',delta}))changed++;continue}if(enqueue(dataset,key,b[key]===undefined))changed++}}snapshot=next;mirrorDb(db).catch(()=>{});if(changed)schedule(180);return changed}
+  function seedAll(db){const next=snapshotDb(db);snapshot=next;let n=0;for(const [dataset,entry] of Object.entries(next))for(const key of Object.keys(entry.map||{})){enqueue(dataset,key,false);n++}mirrorDb(db).catch(()=>{});if(n)schedule(150);return n}
+  function openIdb(){return new Promise((resolve,reject)=>{if(!('indexedDB'in window))return resolve(null);const req=indexedDB.open(IDB_NAME,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE,{keyPath:'tenantId'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+  function compactMirrorDb(source,level=1){const x=clone(source||{}),limits=level>1?{audit:120,notifications:80,chatMessages:120,heldOrders:40}:{audit:500,notifications:200,chatMessages:300,heldOrders:100};for(const[k,max]of Object.entries(limits))if(Array.isArray(x[k])&&x[k].length>max)x[k]=x[k].slice(0,max);return x}
+  async function putMirrorRecord(idb,record){return new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).put(record);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('IndexedDB write failed'));tx.onabort=()=>reject(tx.error||new Error('IndexedDB write aborted'))})}
+  async function mirrorDb(db,opts={}){const t=tenant();if(!t)return;const idb=await openIdb();if(!idb)return;const savedAt=Number(opts.savedAt)||Date.now();try{await putMirrorRecord(idb,{tenantId:t,db:clone(db),savedAt})}catch(_){try{await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,1),savedAt,compacted:true})}catch(__){await putMirrorRecord(idb,{tenantId:t,db:compactMirrorDb(db,2),savedAt,compacted:true})}}finally{idb.close()}}
+  async function readMirror(t=tenant()){if(!t)return null;const idb=await openIdb();if(!idb)return null;const result=await new Promise((resolve,reject)=>{const tx=idb.transaction(IDB_STORE,'readonly'),req=tx.objectStore(IDB_STORE).get(t);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});idb.close();return result}
+  function representativeScopeId(){
+    const rt=runtime();if(rt?.type!=='representative')return '';
+    const direct=safe(rt?.account?.representativeId);if(direct)return direct;
+    const uid=safe(rt?.account?.id),d=window.AlMezan?.db;
+    return safe(d?.employees?.find?.(e=>String(e.id)===uid)?.representativeId||d?.representatives?.find?.(r=>String(r.employeeId)===uid)?.id);
   }
-  function writeJson(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-    catch (_) { return false; }
-  }
-  function scoped(prefix, t = tenant()) { return prefix + encodeURIComponent(t || 'none'); }
-  function metaKey(t) { return scoped(META_PREFIX, t); }
-  function pendingKey(t) { return scoped(PENDING_PREFIX, t); }
-  function failedKey(t) { return scoped(FAILED_PREFIX, t); }
-  function migratedKey(t) { return scoped(MIGRATED_PREFIX, t); }
-
-  function deviceId() {
-    let id = localStorage.getItem(DEVICE_KEY);
-    if (!id) {
-      id = crypto.randomUUID ? crypto.randomUUID() : `DEV-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem(DEVICE_KEY, id);
+  function allowRemoteRecordForRole(dataset,key,value){
+    const repId=representativeScopeId();if(!repId)return true;
+    // المندوب لا يحتاج أرصدة مستودعات الشركة. مخزونه الوحيد هو repStock الخاص به.
+    if(dataset==='stock')return false;
+    if(dataset==='repStock'){
+      const row=value&&typeof value==='object'?value:null;
+      if(row?.repId)return String(row.repId)===String(repId);
+      return String(key||'').split('::')[0]===String(repId);
     }
-    return id;
-  }
-  function hashText(text) {
-    let h = 2166136261;
-    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return (h >>> 0).toString(36);
-  }
-  function stableJson(v) { return JSON.stringify(v); }
-  function nextRev() {
-    const candidate = Date.now() * 1000;
-    lastRev = Math.max(lastRev + 1, candidate);
-    return lastRev;
-  }
-
-  function recordKey(dataset, row, index = 0) {
-    if (row && typeof row === 'object') {
-      // Keep legacy key order for cloud-path compatibility.
-      if (row.id != null && String(row.id) !== '') return String(row.id);
-      if (dataset === 'stock' && row.productId && row.warehouseId) return `${row.productId}::${row.warehouseId}`;
-      if (dataset === 'itemPrices') return `${row.productId || ''}::${row.unitId || ''}::${row.priceGroupId || ''}`;
-      if (dataset === 'exchangeRates') return `${row.currencyId || ''}::${row.date || ''}`;
-      if (row.code != null && String(row.code) !== '') return `code:${row.code}`;
-      if (row.number != null && String(row.number) !== '') return `number:${row.number}`;
-    }
-    return `_h_${hashText(stableJson(row))}_${index}`;
-  }
-  function isQtyDataset(dataset) { return dataset === 'stock' || dataset === 'repStock'; }
-  function snapshotDb(db) {
-    const out = {};
-    for (const [dataset, value] of Object.entries(db || {})) {
-      if (Array.isArray(value)) {
-        const map = {};
-        value.forEach((row, i) => {
-          const key = recordKey(dataset, row, i);
-          const h = hashText(stableJson(row));
-          map[key] = isQtyDataset(dataset) ? { h, qty: Number(row?.qtyBase || 0) } : h;
-        });
-        out[dataset] = { kind: 'array', map };
-      } else {
-        out[dataset] = { kind: 'value', map: { __value__: hashText(stableJson(value)) } };
-      }
-    }
-    return out;
-  }
-  const snapHash = v => v && typeof v === 'object' ? v.h : v;
-  const snapQty = v => v && typeof v === 'object' ? Number(v.qty || 0) : 0;
-  function pkey(dataset, key) { return `${dataset}\u0001${key}`; }
-
-  function migrateLegacyOnce(t = tenant()) {
-    if (!t || localStorage.getItem(migratedKey(t)) === '1') return;
-
-    if (!localStorage.getItem(metaKey(t))) {
-      for (const prefix of LEGACY_META_KEYS) {
-        const old = readJson(scoped(prefix, t), null);
-        if (old && typeof old === 'object') {
-          writeJson(metaKey(t), {
-            protocol: 5,
-            records: old.records && typeof old.records === 'object' ? old.records : {},
-            remoteBatch: 0,
-            // v5 does one full reconciliation after upgrading, then returns to delta-only reads.
-            // This repairs old devices that had an incorrect last-batch marker and missed records.
-            batchInitialized: false,
-            lastPullAt: Number(old.lastPullAt || 0),
-            lastPushAt: Number(old.lastPushAt || 0),
-            lastSuccessAt: Number(old.lastSuccessAt || 0),
-            migratedFrom: Number(old.protocol || 4)
-          });
-          break;
-        }
-      }
-    }
-
-    if (!localStorage.getItem(pendingKey(t))) {
-      const merged = {};
-      for (const prefix of LEGACY_PENDING_KEYS) Object.assign(merged, readJson(scoped(prefix, t), {}) || {});
-      // Retry old quarantined operations in the fresh engine instead of silently abandoning them.
-      for (const prefix of LEGACY_FAILED_KEYS) {
-        const failed = readJson(scoped(prefix, t), {}) || {};
-        for (const [pk, op] of Object.entries(failed)) if (!merged[pk] && op?.dataset && op?.key) {
-          const clean = { ...op };
-          delete clean.error; delete clean.failedAt;
-          clean.retryFromLegacy = true;
-          clean.rev = Number(clean.rev || nextRev());
-          clean.deviceId = clean.deviceId || deviceId();
-          merged[pk] = clean;
-        }
-      }
-      writeJson(pendingKey(t), merged);
-    }
-    localStorage.setItem(migratedKey(t), '1');
-  }
-
-  function defaultMeta() {
-    return { protocol: 5, records: {}, remoteBatch: 0, batchInitialized: false, lastPullAt: 0, lastPushAt: 0, lastSuccessAt: 0 };
-  }
-  function readMeta() {
-    migrateLegacyOnce();
-    const m = readJson(metaKey(), defaultMeta());
-    if (!m.records || typeof m.records !== 'object') m.records = {};
-    m.protocol = 5;
-    return m;
-  }
-  function writeMeta(m) { writeJson(metaKey(), { ...m, protocol: 5 }); }
-  function readPending() { migrateLegacyOnce(); return readJson(pendingKey(), {}); }
-  function writePending(p) { writeJson(pendingKey(), p); emitStatus(); }
-  function readFailed() { return readJson(failedKey(), {}); }
-  function writeFailed(f) { writeJson(failedKey(), f); emitStatus(); }
-  function pendingCount() { return Object.keys(readPending()).length; }
-  function failedCount() { return Object.keys(readFailed()).length; }
-
-  function emitStatus(extra = {}) {
-    try {
-      window.dispatchEvent(new CustomEvent('almezan:sync-status', {
-        detail: { pending: pendingCount(), failed: failedCount(), online: navigator.onLine !== false, busy, engine: VERSION, ...extra }
-      }));
-    } catch (_) {}
-  }
-
-  function pendingOpsForRecord(pending, dataset, key) {
-    return Object.values(pending || {}).filter(op => op?.dataset === dataset && String(op?.key) === String(key));
-  }
-  function pendingRevForRecord(pending, dataset, key) {
-    return pendingOpsForRecord(pending, dataset, key).reduce((max, op) => Math.max(max, Number(op.rev || 0)), 0);
-  }
-  function pendingQtyDelta(pending, dataset, key) {
-    return Number(pendingOpsForRecord(pending, dataset, key)
-      .filter(op => op?.mode === 'stockDelta')
-      .reduce((sum, op) => sum + Number(op.delta || 0), 0).toFixed(8));
-  }
-
-  function enqueue(dataset, key, deleted = false, rev = nextRev(), extra = {}) {
-    if (!tenant()) return false;
-    const pending = readPending();
-    const basePk = pkey(dataset, key);
-    const isDelta = extra.mode === 'stockDelta';
-    const pk = isDelta ? `${basePk}\u0001${rev}` : basePk;
-    const current = pending[pk];
-    if (current && Number(current.rev || 0) > rev) return false;
-
-    // Non-stock records are coalesced: only the newest final state for a record is sent.
-    if (!isDelta) {
-      for (const oldPk of Object.keys(pending)) {
-        const old = pending[oldPk];
-        if (oldPk !== pk && old?.dataset === dataset && String(old?.key) === String(key) && old?.mode !== 'stockDelta') delete pending[oldPk];
-      }
-    }
-
-    pending[pk] = { dataset, key, deleted: !!deleted, rev, deviceId: deviceId(), attempts: 0, ...extra };
-    writePending(pending);
-    const meta = readMeta();
-    meta.records[basePk] = { ...(meta.records[basePk] || {}), rev, deleted: !!deleted };
-    writeMeta(meta);
-    return true;
-  }
-
-  function getRecord(db, dataset, key) {
-    const value = db?.[dataset];
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) if (recordKey(dataset, value[i], i) === key) return value[i];
-      return undefined;
-    }
-    return key === '__value__' ? value : undefined;
-  }
-  function applyRecord(db, dataset, key, value, deleted) {
-    if (key === '__value__') {
-      if (deleted) delete db[dataset]; else db[dataset] = clone(value);
-      return;
-    }
-    if (!Array.isArray(db[dataset])) db[dataset] = [];
-    const arr = db[dataset];
-    const idx = arr.findIndex((row, i) => recordKey(dataset, row, i) === key);
-    if (deleted) { if (idx >= 0) arr.splice(idx, 1); }
-    else if (idx >= 0) arr[idx] = clone(value);
-    else arr.push(clone(value));
-  }
-
-  function capture(db) {
-    if (suppress || !tenant()) return 0;
-    const next = snapshotDb(db);
-    if (!initialized) { snapshot = next; return 0; }
-    if (!snapshot) { snapshot = next; mirrorDb(db).catch(() => {}); return 0; }
-
-    let changed = 0;
-    const datasets = new Set([...Object.keys(snapshot), ...Object.keys(next)]);
-    for (const dataset of datasets) {
-      const before = snapshot[dataset]?.map || {};
-      const after = next[dataset]?.map || {};
-      const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-      for (const key of keys) {
-        if (snapHash(before[key]) === snapHash(after[key])) continue;
-        if (isQtyDataset(dataset)) {
-          if (after[key] === undefined) {
-            if (enqueue(dataset, key, true)) changed++;
-            continue;
-          }
-          if (before[key] === undefined) {
-            // New quantity row: send only its initial quantity as an atomic delta.
-            // This prevents two devices creating/updating the same stock row from overwriting each other.
-            const initialQty = Number(snapQty(after[key]).toFixed(8));
-            if (Math.abs(initialQty) > 1e-10) {
-              if (enqueue(dataset, key, false, nextRev(), { mode: 'stockDelta', delta: initialQty })) changed++;
-            } else if (enqueue(dataset, key, false, nextRev(), { mode: 'snapshotReplace' })) changed++;
-            continue;
-          }
-          const delta = Number((snapQty(after[key]) - snapQty(before[key])).toFixed(8));
-          if (Math.abs(delta) > 1e-10 && enqueue(dataset, key, false, nextRev(), { mode: 'stockDelta', delta })) changed++;
-          continue;
-        }
-        if (enqueue(dataset, key, after[key] === undefined)) changed++;
-      }
-    }
-    snapshot = next;
-    mirrorDb(db).catch(() => {});
-    if (changed) requestSync(70);
-    return changed;
-  }
-
-  function seedAll(db) {
-    const next = snapshotDb(db);
-    snapshot = next;
-    let queued = 0;
-    for (const [dataset, entry] of Object.entries(next)) {
-      for (const key of Object.keys(entry.map || {})) if (enqueue(dataset, key, false, nextRev(), { mode: 'snapshotReplace' })) queued++;
-    }
-    mirrorDb(db).catch(() => {});
-    if (queued) requestSync(80);
-    return queued;
-  }
-
-  function openIdb() {
-    return new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) return resolve(null);
-      const req = indexedDB.open(IDB_NAME, 1);
-      req.onupgradeneeded = () => {
-        const idb = req.result;
-        if (!idb.objectStoreNames.contains(IDB_STORE)) idb.createObjectStore(IDB_STORE, { keyPath: 'tenantId' });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  function compactMirrorDb(source, level = 1) {
-    const x = clone(source || {});
-    const limits = level > 1 ? { audit: 120, notifications: 80, chatMessages: 120, heldOrders: 40 } : { audit: 500, notifications: 200, chatMessages: 300, heldOrders: 100 };
-    for (const [k, max] of Object.entries(limits)) if (Array.isArray(x[k]) && x[k].length > max) x[k] = x[k].slice(0, max);
-    return x;
-  }
-  async function putMirrorRecord(idb, record) {
-    return new Promise((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(record);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error('IndexedDB write failed'));
-      tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
-    });
-  }
-  async function mirrorDb(db, opts = {}) {
-    const t = tenant(); if (!t) return;
-    const idb = await openIdb(); if (!idb) return;
-    const savedAt = Number(opts.savedAt) || Date.now();
-    try { await putMirrorRecord(idb, { tenantId: t, db: clone(db), savedAt }); }
-    catch (_) {
-      try { await putMirrorRecord(idb, { tenantId: t, db: compactMirrorDb(db, 1), savedAt, compacted: true }); }
-      catch (_) { await putMirrorRecord(idb, { tenantId: t, db: compactMirrorDb(db, 2), savedAt, compacted: true }); }
-    } finally { idb.close(); }
-  }
-  async function readMirror(t = tenant()) {
-    if (!t) return null;
-    const idb = await openIdb(); if (!idb) return null;
-    const result = await new Promise((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(t);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-    idb.close();
-    return result;
-  }
-
-  function representativeScopeId() {
-    const rt = runtime(); if (rt?.type !== 'representative') return '';
-    const direct = safe(rt?.account?.representativeId); if (direct) return direct;
-    const uid = safe(rt?.account?.id), d = window.AlMezan?.db;
-    return safe(d?.employees?.find?.(e => String(e.id) === uid)?.representativeId || d?.representatives?.find?.(r => String(r.employeeId) === uid)?.id);
-  }
-  function allowRemoteRecordForRole(dataset, key, value) {
-    const repId = representativeScopeId(); if (!repId) return true;
-    if (dataset === 'stock') return false;
-    if (dataset === 'repStock') {
-      const row = value && typeof value === 'object' ? value : null;
-      if (row?.repId) return String(row.repId) === String(repId);
-      return String(key || '').split('::')[0] === String(repId);
-    }
-    if (dataset === 'repStockMoves') {
-      const row = value && typeof value === 'object' ? value : null;
-      return !row?.repId || String(row.repId) === String(repId);
+    if(dataset==='repStockMoves'){
+      const row=value&&typeof value==='object'?value:null;
+      return !row?.repId||String(row.repId)===String(repId);
     }
     return true;
   }
-
-  function cloudPath(dataset, key) { return `${basePath()}/${encodeURIComponent(dataset)}/${encodeURIComponent(key)}`; }
-  function parseCloudPath(path) {
-    const prefix = basePath() + '/';
-    if (!String(path).startsWith(prefix)) return null;
-    const rel = String(path).slice(prefix.length), parts = rel.split('/');
-    if (parts.length < 2) return null;
-    try { return { dataset: decodeURIComponent(parts[0]), key: decodeURIComponent(parts.slice(1).join('/')) }; }
-    catch (_) { return null; }
+  function cloudPath(dataset,key){return `${basePath()}/${encodeURIComponent(dataset)}/${encodeURIComponent(key)}`}
+  function parseCloudPath(path){const prefix=basePath()+'/';if(!String(path).startsWith(prefix))return null;const rel=String(path).slice(prefix.length),parts=rel.split('/');if(parts.length<2)return null;try{return{dataset:decodeURIComponent(parts[0]),key:decodeURIComponent(parts.slice(1).join('/'))}}catch(_){return null}}
+  function rowsOf(direct,r){try{return direct.rows(r)||[]}catch(_){return[]}}
+  async function ensureSyncSchema(){const t=tenant(),cfg=dbCfg(),direct=window.AlMezanActivation?.tursoDirect;if(!t||!cfg?.databaseURL||!cfg?.authToken||!direct)throw Error('بيانات المزامنة غير متاحة.');if(schemaTenant===t)return{cfg,direct,table:direct.table(cfg),metaTable:direct.table(cfg)+'_syncmeta',seqTable:direct.table(cfg)+'_sequences'};await direct.ensure(cfg);const table=direct.table(cfg),metaTable=table+'_syncmeta',seqTable=table+'_sequences';const[info]=await direct.pipeline(cfg,[{sql:`PRAGMA table_info(${table})`,args:[]}]);const cols=rowsOf(direct,info).map(x=>String(x.name));if(!cols.includes('sync_batch')){try{await direct.pipeline(cfg,[{sql:`ALTER TABLE ${table} ADD COLUMN sync_batch INTEGER NOT NULL DEFAULT 0`,args:[]}])}catch(e){if(!/duplicate column|already exists/i.test(String(e?.message||e)))throw e}}await direct.pipeline(cfg,[{sql:`CREATE TABLE IF NOT EXISTS ${metaTable} (id INTEGER PRIMARY KEY CHECK(id=1), batch INTEGER NOT NULL DEFAULT 0)`,args:[]},{sql:`CREATE TABLE IF NOT EXISTS ${seqTable} (name TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)`,args:[]}]);schemaTenant=t;return{cfg,direct,table,metaTable,seqTable}}
+  async function reserveBatch(schema){const[r]=await schema.direct.pipeline(schema.cfg,[{sql:`INSERT INTO ${schema.metaTable}(id,batch) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET batch=batch+1 RETURNING batch`,args:[]}]);return Number(rowsOf(schema.direct,r)[0]?.batch||1)}
+  async function readRemoteBatch(schema){const[r]=await retryRead(()=>schema.direct.pipeline(schema.cfg,[{sql:`SELECT batch FROM ${schema.metaTable} WHERE id=1 LIMIT 1`,args:[]}]),2);return Number(rowsOf(schema.direct,r)[0]?.batch||0)}
+  function documentSequence(value){const m=String(value||'').trim().match(/(\d+)\s*$/);return m?Math.max(0,Number(m[1])||0):0}
+  function formatDocumentNumber(prefix,value){prefix=safe(prefix)||'INV';return `${prefix}-${String(Math.max(1,Number(value)||1)).padStart(6,'0')}`}
+  async function peekDocumentNumber(kind,prefix,localFloor=0){
+    prefix=safe(prefix)||'INV';localFloor=Math.max(0,Number(localFloor)||0);
+    if(navigator.onLine===false||!tenant())return formatDocumentNumber(prefix,localFloor+1);
+    const s=await ensureSyncSchema();
+    const[r]=await s.direct.pipeline(s.cfg,[{sql:`SELECT value FROM ${s.seqTable} WHERE name=? LIMIT 1`,args:[String(kind||'sale')]}]);
+    const remote=Number(rowsOf(s.direct,r)[0]?.value||0),next=Math.max(localFloor,remote)+1;
+    return formatDocumentNumber(prefix,next)
   }
-  function rowsOf(direct, result) { try { return direct.rows(result) || []; } catch (_) { return []; } }
-
-  async function retryRead(fn, attempts = 2) {
-    let last;
-    for (let i = 0; i < attempts; i++) {
-      try { return await fn(); }
-      catch (e) {
-        last = e;
-        if (navigator.onLine === false || i === attempts - 1) break;
-        await sleep(300 * (i + 1));
+  async function reserveDocumentNumber(kind,prefix,minNext=1){
+    prefix=safe(prefix)||'INV';minNext=Math.max(1,Number(minNext)||1);
+    if(navigator.onLine===false||!tenant())return formatDocumentNumber(prefix,minNext);
+    const s=await ensureSyncSchema();
+    const[r]=await s.direct.pipeline(s.cfg,[{sql:`INSERT INTO ${s.seqTable}(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN value+1>excluded.value THEN value+1 ELSE excluded.value END RETURNING value`,args:[String(kind||'sale'),minNext]}]);
+    const value=Number(rowsOf(s.direct,r)[0]?.value||minNext);
+    return formatDocumentNumber(prefix,value)
+  }
+  async function claimDocumentNumber(kind,prefix,requested,localFloor=0){
+    prefix=safe(prefix)||'INV';localFloor=Math.max(0,Number(localFloor)||0);
+    const requestedSeq=documentSequence(requested),target=Math.max(localFloor+1,requestedSeq||0,1);
+    if(navigator.onLine===false||!tenant())return formatDocumentNumber(prefix,target);
+    const s=await ensureSyncSchema();
+    const[r]=await s.direct.pipeline(s.cfg,[{sql:`INSERT INTO ${s.seqTable}(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value+1 END RETURNING value`,args:[String(kind||'sale'),target]}]);
+    const value=Number(rowsOf(s.direct,r)[0]?.value||target);
+    return formatDocumentNumber(prefix,value)
+  }
+  function buildPushStatements(s,batch,appDb){
+    const statements=[{sql:'BEGIN IMMEDIATE',args:[]},{sql:`INSERT INTO ${s.metaTable}(id,batch) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET batch=batch+1`,args:[]}];let maxSaleSeq=0;
+    for(const[,op]of batch){
+      const current=getRecord(appDb,op.dataset,op.key),deleted=op.deleted||current===undefined,envelope={v:deleted?null:current,deleted,rev:op.rev,deviceId:op.deviceId||deviceId()};
+      if(op.dataset==='sales'&&!deleted)maxSaleSeq=Math.max(maxSaleSeq,documentSequence(current?.number));
+      if((op.dataset==='stock'||op.dataset==='repStock')&&op.mode==='stockDelta'){
+        const parts=String(op.key).split('::'),fallback=op.dataset==='repStock'?{repId:parts[0]||'',productId:parts[1]||'',qtyBase:Number(op.delta||0)}:{productId:parts[0]||'',warehouseId:parts[1]||'',qtyBase:Number(op.delta||0)},base=current&&typeof current==='object'?{...current,qtyBase:Number(current.qtyBase||0)}:fallback,dev=op.deviceId||deviceId(),devKey='d'+hashText(dev),clockPath=`$.stockClock.${devKey}`,rev=Number(op.rev),insertEnvelope={v:base,deleted:false,rev,deviceId:dev,stockClock:{[devKey]:rev}};
+        statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=json_set(CASE WHEN json_type(${s.table}.payload,'$.v')='object' THEN ${s.table}.payload ELSE excluded.payload END,'$.v.qtyBase',COALESCE(CAST(json_extract(${s.table}.payload,'$.v.qtyBase') AS REAL),0)+?,'$.rev',?,'$.deviceId',?,'${clockPath}',?),deleted=0,updated_at=?,sync_batch=(SELECT batch FROM ${s.metaTable} WHERE id=1) WHERE COALESCE(CAST(json_extract(${s.table}.payload,'${clockPath}') AS INTEGER),0)<?`,args:[cloudPath(op.dataset,op.key),JSON.stringify(insertEnvelope),0,rev,Number(op.delta||0),rev,dev,rev,rev,rev]});
+        continue
+      }
+      statements.push({sql:`INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1)) ON CONFLICT(path) DO UPDATE SET payload=excluded.payload,deleted=excluded.deleted,updated_at=excluded.updated_at,sync_batch=excluded.sync_batch WHERE excluded.sync_batch>=${s.table}.sync_batch`,args:[cloudPath(op.dataset,op.key),JSON.stringify(envelope),deleted?1:0,Number(op.rev)]})
+    }
+    if(maxSaleSeq>0)statements.push({sql:`INSERT INTO ${s.seqTable}(name,value) VALUES('sale',?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value END`,args:[maxSaleSeq]});
+    statements.push({sql:'COMMIT',args:[]});return statements
+  }
+  function removePendingIfSame(pk,op){const latest=readPending();if(Number(latest[pk]?.rev||0)===Number(op.rev)){delete latest[pk];writePending(latest);return true}return false}
+  function quarantinePending(pk,op,error){
+    const latest=readPending();if(Number(latest[pk]?.rev||0)!==Number(op.rev))return false;
+    delete latest[pk];writePending(latest);
+    const failed=readFailed(),prev=failed[pk]||{};failed[pk]={...op,error:String(error?.message||error||'فشل غير معروف'),failedAt:Date.now(),attempts:Number(prev.attempts||0)+1};writeFailed(failed);return true
+  }
+  async function pushPending(){
+    const pending=readPending(),entries=Object.entries(pending);if(!entries.length)return{uploaded:0,remaining:0};
+    const s=await ensureSyncSchema(),appDb=window.AlMezan?.db||{};let uploaded=0,skipped=0;
+    const batchSize=entries.some(([,op])=>op?.imported===true)?IMPORT_PUSH_BATCH_SIZE:PUSH_BATCH_SIZE;
+    for(let offset=0;offset<entries.length;offset+=batchSize){
+      const batch=entries.slice(offset,offset+batchSize);
+      try{
+        await s.direct.pipeline(s.cfg,buildPushStatements(s,batch,appDb),Math.max(30000,batch.length*1300));
+        for(const[pk,op]of batch)if(removePendingIfSame(pk,op))uploaded++
+      }catch(batchError){
+        console.warn('[AlMeezan sync] batch failed; isolating operations so one bad record cannot block the queue.',batchError);
+        for(const pair of batch){const[pk,op]=pair;try{await s.direct.pipeline(s.cfg,buildPushStatements(s,[pair],appDb),30000);if(removePendingIfSame(pk,op))uploaded++}catch(error){if(quarantinePending(pk,op,error))skipped++;console.warn('[AlMeezan sync] skipped failed queue item',op?.dataset,op?.key,error)}}
       }
     }
-    throw last;
+    const m=readMeta();m.lastPushAt=Date.now();writeMeta(m);return{uploaded,skipped,failed:failedCount(),remaining:pendingCount()}
   }
-
-  async function ensureSyncSchema() {
-    const t = tenant(), cfg = dbCfg(), direct = window.AlMezanActivation?.tursoDirect;
-    if (!t || !cfg?.databaseURL || !cfg?.authToken || !direct) throw Error('بيانات المزامنة غير متاحة.');
-    const table = direct.table(cfg), metaTable = `${table}_syncmeta`, seqTable = `${table}_sequences`;
-    if (schemaTenant === t) return { cfg, direct, table, metaTable, seqTable };
-
-    await direct.ensure(cfg);
-    const [info] = await direct.pipeline(cfg, [{ sql: `PRAGMA table_info(${table})`, args: [] }]);
-    const cols = rowsOf(direct, info).map(x => String(x.name));
-    if (!cols.includes('sync_batch')) {
-      try { await direct.pipeline(cfg, [{ sql: `ALTER TABLE ${table} ADD COLUMN sync_batch INTEGER NOT NULL DEFAULT 0`, args: [] }]); }
-      catch (e) { if (!/duplicate column|already exists/i.test(String(e?.message || e))) throw e; }
+  async function applyRows(rows,remoteBatch){
+    const pending=readPending(),meta=readMeta(),current=clone(window.AlMezan?.db||{}),changedDatasets=new Set(),changedRecords={};let applied=0;
+    for(const row of rows){
+      const parsed=parseCloudPath(row.path);if(!parsed)continue;
+      const pk=pkey(parsed.dataset,parsed.key),rowBatch=Number(row.sync_batch||0),localBatch=Number(meta.records?.[pk]?.batch||0),localPending=pendingRevForRecord(pending,parsed.dataset,parsed.key);
+      let envelope=row.payload;if(typeof envelope==='string'){try{envelope=JSON.parse(envelope)}catch(_){envelope=null}}
+      const deleted=Number(row.deleted)===1||envelope?.deleted===true;let value=envelope&&Object.prototype.hasOwnProperty.call(envelope,'v')?envelope.v:envelope;
+      if(!allowRemoteRecordForRole(parsed.dataset,parsed.key,value))continue;
+      const qtyDataset=parsed.dataset==='stock'||parsed.dataset==='repStock';
+      if(!qtyDataset&&localPending>0)continue;
+      if(!qtyDataset&&rowBatch>0&&localBatch>=rowBatch)continue;
+      if(qtyDataset&&!deleted&&value&&localPending>0){value=clone(value);value.qtyBase=Number((Number(value.qtyBase||0)+pendingQtyDelta(pending,parsed.dataset,parsed.key)).toFixed(8))}
+      const before=getRecord(current,parsed.dataset,parsed.key),beforeHash=before===undefined?'__missing__':hashText(stableJson(before)),afterHash=deleted?'__deleted__':hashText(stableJson(value));
+      if(qtyDataset&&rowBatch>0&&localBatch>=rowBatch&&beforeHash===afterHash)continue;
+      applyRecord(current,parsed.dataset,parsed.key,value,deleted);
+      meta.records[pk]={rev:Number(row.updated_at||envelope?.rev||0),batch:rowBatch,deleted,hash:deleted?'':hashText(stableJson(value))};
+      if(!qtyDataset&&pending[pk]&&localPending<=Number(row.updated_at||0))delete pending[pk];
+      changedDatasets.add(parsed.dataset);(changedRecords[parsed.dataset]||(changedRecords[parsed.dataset]=[])).push(parsed.key);applied++
     }
-    await direct.pipeline(cfg, [
-      { sql: `CREATE TABLE IF NOT EXISTS ${metaTable} (id INTEGER PRIMARY KEY CHECK(id=1), batch INTEGER NOT NULL DEFAULT 0)`, args: [] },
-      { sql: `CREATE TABLE IF NOT EXISTS ${seqTable} (name TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)`, args: [] },
-      { sql: `CREATE INDEX IF NOT EXISTS idx_${table}_sync_batch ON ${table}(sync_batch,path)`, args: [] }
-    ]);
-    schemaTenant = t;
-    return { cfg, direct, table, metaTable, seqTable };
+    meta.protocol=4;meta.remoteBatch=Math.max(Number(meta.remoteBatch||0),Number(remoteBatch||0));meta.batchInitialized=true;meta.lastPullAt=Date.now();meta.lastSuccessAt=Date.now();writeMeta(meta);writePending(pending);
+    const detail={at:Date.now(),datasets:[...changedDatasets],records:changedRecords,remoteBatch:Number(remoteBatch||0),applied};
+    if(applied&&window.AlMezan?.replaceDBFromSync){suppress=true;try{window.AlMezan.replaceDBFromSync(current,detail)}finally{suppress=false}snapshot=snapshotDb(window.AlMezan.db);await mirrorDb(window.AlMezan.db).catch(()=>{})}
+    return{applied,detail}
   }
-
-  async function readRemoteBatch(schema) {
-    const [r] = await retryRead(() => schema.direct.pipeline(schema.cfg, [{ sql: `SELECT batch FROM ${schema.metaTable} WHERE id=1 LIMIT 1`, args: [] }]), 2);
-    return Number(rowsOf(schema.direct, r)[0]?.batch || 0);
+  async function pullChanges({force=false}={}){
+    const s=await ensureSyncSchema(),meta=readMeta(),remoteBatch=await readRemoteBatch(s),last=Number(meta.remoteBatch||0);if(meta.batchInitialized&&!force&&remoteBatch<=last)return{applied:0,remoteRows:0,remoteBatch,changedDatasets:[]};
+    const lo=basePath(),hi=lo+'\uffff';let rows=[];
+    if(!meta.batchInitialized){const[r]=await retryRead(()=>s.direct.pipeline(s.cfg,[{sql:`SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? ORDER BY path`,args:[lo,hi]}],60000),3);rows=rowsOf(s.direct,r).map(x=>({...x,payload:(()=>{try{return typeof x.payload==='string'?JSON.parse(x.payload):x.payload}catch(_){return x.payload}})()}))}
+    else if(remoteBatch>last){const[r]=await retryRead(()=>s.direct.pipeline(s.cfg,[{sql:`SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? AND sync_batch>? ORDER BY sync_batch ASC,path ASC`,args:[lo,hi,last]}],60000),3);rows=rowsOf(s.direct,r).map(x=>({...x,payload:(()=>{try{return typeof x.payload==='string'?JSON.parse(x.payload):x.payload}catch(_){return x.payload}})()}))}
+    const out=await applyRows(rows,remoteBatch);return{applied:out.applied,remoteRows:rows.length,remoteBatch,changedDatasets:out.detail?.datasets||[],changedRecords:out.detail?.records||{},bootstrap:!meta.batchInitialized}
   }
-
-  function documentSequence(value) {
-    const m = String(value || '').trim().match(/(\d+)\s*$/);
-    return m ? Math.max(0, Number(m[1]) || 0) : 0;
+  const BUSINESS_DATASETS=new Set(['sales','purchases','products','customers','suppliers','stock','repStock','journals','vouchers','cheques','installmentContracts','installmentSchedule','transfers','transferRequests','itemPrices','finance','expenses','revenues','wastageDocs','productBatches']);
+  function businessRecordCount(db){const keys=['sales','purchases','products','suppliers','stock','journals','vouchers','cheques','installmentContracts','transfers','transferRequests'];return keys.reduce((n,k)=>n+(Array.isArray(db?.[k])?db[k].length:0),0)}
+  function pendingBusinessCount(){return Object.values(readPending()).filter(op=>BUSINESS_DATASETS.has(String(op?.dataset||''))).length}
+  async function pullFull({reason='manual'}={}){
+    if(!tenant())return{unavailable:true,reason};
+    if(navigator.onLine===false)return{offline:true,reason};
+    if(pendingCount()>0){const risky=pendingBusinessCount();if(risky>0)return{blocked:true,reason,message:`يوجد ${risky} تغيير محلي تجاري معلق؛ قم بمزامنته أولاً حتى لا تضيع أي حركة.`};writePending({})}
+    const s=await ensureSyncSchema(),remoteBatch=await readRemoteBatch(s),lo=basePath(),hi=lo+'\uffff';
+    const[r]=await retryRead(()=>s.direct.pipeline(s.cfg,[{sql:`SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? ORDER BY path`,args:[lo,hi]}],60000),3);
+    const rows=rowsOf(s.direct,r).map(x=>({...x,payload:(()=>{try{return typeof x.payload==='string'?JSON.parse(x.payload):x.payload}catch(_){return x.payload}})()}));
+    if(!rows.length)return{applied:0,remoteRows:0,remoteBatch,empty:true,reason};
+    const old=readMeta(),repair={...old,protocol:4,records:{},remoteBatch:0,batchInitialized:false};writeMeta(repair);
+    try{const out=await applyRows(rows,remoteBatch);emitStatus({state:'success',recovered:true});return{applied:out.applied,remoteRows:rows.length,remoteBatch,changedDatasets:out.detail?.datasets||[],changedRecords:out.detail?.records||{},recovered:true,reason}}
+    catch(error){writeMeta(old);throw error}
   }
-  function formatDocumentNumber(prefix, value) {
-    prefix = safe(prefix) || 'INV';
-    return `${prefix}-${String(Math.max(1, Number(value) || 1)).padStart(6, '0')}`;
+  async function recoverIfEmpty({silent=true}={}){
+    if(!tenant()||navigator.onLine===false)return{skipped:true};
+    const localCount=businessRecordCount(window.AlMezan?.db||{});if(localCount>0)return{skipped:true,localCount};
+    // لا نعتبر حركات الإقلاع غير التجارية سبباً لمنع استعادة بيانات الشركة القديمة.
+    // pullFull يمنع الاستعادة فقط عندما توجد حركات تجارية محلية حقيقية حتى لا نخسرها.
+    try{const r=await pullFull({reason:'empty-local-recovery'});if(r?.remoteRows>0&&!silent)window.AlMezan?.toast?.(`تمت استعادة البيانات القديمة من قاعدة الشركة (${r.applied||0} سجل).`,'success',5200);return r}
+    catch(error){console.warn('[AlMeezan sync] empty-local recovery failed',error);return{error:true,message:String(error?.message||error)}}
   }
-  async function peekDocumentNumber(kind, prefix, localFloor = 0) {
-    prefix = safe(prefix) || 'INV'; localFloor = Math.max(0, Number(localFloor) || 0);
-    if (navigator.onLine === false || !tenant()) return formatDocumentNumber(prefix, localFloor + 1);
-    const s = await ensureSyncSchema();
-    const [r] = await s.direct.pipeline(s.cfg, [{ sql: `SELECT value FROM ${s.seqTable} WHERE name=? LIMIT 1`, args: [String(kind || 'sale')] }]);
-    const remote = Number(rowsOf(s.direct, r)[0]?.value || 0);
-    return formatDocumentNumber(prefix, Math.max(localFloor, remote) + 1);
-  }
-  async function reserveDocumentNumber(kind, prefix, minNext = 1) {
-    prefix = safe(prefix) || 'INV'; minNext = Math.max(1, Number(minNext) || 1);
-    if (navigator.onLine === false || !tenant()) return formatDocumentNumber(prefix, minNext);
-    const s = await ensureSyncSchema();
-    const [r] = await s.direct.pipeline(s.cfg, [{
-      sql: `INSERT INTO ${s.seqTable}(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN value+1>excluded.value THEN value+1 ELSE excluded.value END RETURNING value`,
-      args: [String(kind || 'sale'), minNext]
-    }]);
-    return formatDocumentNumber(prefix, Number(rowsOf(s.direct, r)[0]?.value || minNext));
-  }
-  async function claimDocumentNumber(kind, prefix, requested, localFloor = 0) {
-    prefix = safe(prefix) || 'INV'; localFloor = Math.max(0, Number(localFloor) || 0);
-    const requestedSeq = documentSequence(requested), target = Math.max(localFloor + 1, requestedSeq || 0, 1);
-    if (navigator.onLine === false || !tenant()) return formatDocumentNumber(prefix, target);
-    const s = await ensureSyncSchema();
-    const [r] = await s.direct.pipeline(s.cfg, [{
-      sql: `INSERT INTO ${s.seqTable}(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value+1 END RETURNING value`,
-      args: [String(kind || 'sale'), target]
-    }]);
-    return formatDocumentNumber(prefix, Number(rowsOf(s.direct, r)[0]?.value || target));
-  }
-
-  function buildPushStatements(s, batch, appDb) {
-    const statements = [
-      { sql: 'BEGIN IMMEDIATE', args: [] },
-      { sql: `INSERT INTO ${s.metaTable}(id,batch) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET batch=batch+1`, args: [] }
-    ];
-    let maxSaleSeq = 0;
-
-    for (const [, op] of batch) {
-      const current = getRecord(appDb, op.dataset, op.key);
-      const deleted = op.deleted || current === undefined;
-      if (op.dataset === 'sales' && !deleted) maxSaleSeq = Math.max(maxSaleSeq, documentSequence(current?.number));
-
-      if (isQtyDataset(op.dataset) && op.mode === 'stockDelta' && !deleted) {
-        const parts = String(op.key).split('::');
-        const fallback = op.dataset === 'repStock'
-          ? { repId: parts[0] || '', productId: parts[1] || '', qtyBase: Number(op.delta || 0) }
-          : { productId: parts[0] || '', warehouseId: parts[1] || '', qtyBase: Number(op.delta || 0) };
-        const base = current && typeof current === 'object'
-          ? { ...current, qtyBase: Number(op.delta || 0) }
-          : fallback;
-        const dev = op.deviceId || deviceId();
-        const devKey = `d${hashText(dev)}`;
-        const clockPath = `$.stockClock.${devKey}`;
-        const rev = Number(op.rev || nextRev());
-        const insertEnvelope = { v: base, deleted: false, rev, deviceId: dev, stockClock: { [devKey]: rev } };
-        statements.push({
-          sql: `INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1))
-                ON CONFLICT(path) DO UPDATE SET
-                  payload=json_set(CASE WHEN json_type(${s.table}.payload,'$.v')='object' THEN ${s.table}.payload ELSE excluded.payload END,
-                    '$.v.qtyBase',COALESCE(CAST(json_extract(${s.table}.payload,'$.v.qtyBase') AS REAL),0)+?,
-                    '$.rev',?,'$.deviceId',?,'${clockPath}',?),
-                  deleted=0,updated_at=?,sync_batch=(SELECT batch FROM ${s.metaTable} WHERE id=1)
-                WHERE COALESCE(CAST(json_extract(${s.table}.payload,'${clockPath}') AS INTEGER),0)<?`,
-          args: [cloudPath(op.dataset, op.key), JSON.stringify(insertEnvelope), 0, rev, Number(op.delta || 0), rev, dev, rev, rev, rev]
-        });
-        continue;
+  function probeInterval(){const active=Date.now()-lastActivityAt<30000;if(window.AlMezan?.state?.view==='cashier')return active?CASHIER_ACTIVE_MS:CASHIER_IDLE_MS;return active?REMOTE_ACTIVE_MS:REMOTE_IDLE_MS}
+  async function checkRemote({force=false}={}){if(busy||!tenant()||navigator.onLine===false||document.visibilityState==='hidden')return{skipped:true};const now=Date.now(),interval=pendingCount()?Math.min(3000,probeInterval()):probeInterval();if(!force&&now-lastProbeAt<Math.max(1000,interval-350))return{throttled:true};lastProbeAt=now;try{if(pendingCount())return syncNow({manual:false,force:true,checkRemote:true});const s=await ensureSyncSchema(),remote=await readRemoteBatch(s),local=Number(readMeta().remoteBatch||0);if(!readMeta().batchInitialized||remote>local)return syncNow({manual:false,checkRemote:true});return{changed:false,remoteBatch:remote}}catch(error){if(pendingCount())scheduleRetry();return{error:true,message:String(error?.message||error)}}}
+  async function syncNow({manual=false,force=false,checkRemote:wantRemote=false}={}){if(busy){if(manual)window.AlMezan?.toast?.('المزامنة جارية الآن، انتظر لحظة.','warning');return{busy:true,remaining:pendingCount()}}if(!tenant())return{unavailable:true,remaining:pendingCount()};if(navigator.onLine===false){emitStatus({state:'offline'});if(manual)window.AlMezan?.toast?.('أنت الآن دون إنترنت. التغييرات محفوظة محلياً وستتم مزامنتها عند عودة الاتصال.','warning');return{offline:true,remaining:pendingCount()}};const hasPending=pendingCount()>0;if(!manual&&!force&&!wantRemote&&!hasPending)return{idle:true,remaining:0};busy=true;emitStatus({state:'syncing'});try{const pushed=hasPending?await pushPending():{uploaded:0,remaining:0},pulled=(manual||wantRemote||hasPending)?await pullChanges({force:manual||force}):{applied:0,remoteRows:0,changedDatasets:[]},result={...pushed,...pulled,remaining:pendingCount(),success:true};clearRetry();emitStatus({state:'success',lastSuccessAt:Date.now()});try{window.dispatchEvent(new CustomEvent('almezan:sync-complete',{detail:result}))}catch(_){}if(manual){const skipped=Number(result.skipped||0);window.AlMezan?.toast?.(skipped?`اكتملت المزامنة وتم تجاوز ${skipped} حركة معطلة حتى لا توقف باقي الطابور.`:result.remaining?`تمت المزامنة وبقي ${result.remaining} تغيير معلق وسيعاد إرساله تلقائياً.`:result.applied?`اكتملت المزامنة وتحدثت الشاشة (${result.applied} تغيير).`:'اكتملت المزامنة — البيانات محدثة.',skipped?'warning':'success',skipped?5200:undefined)};if(result.remaining)scheduleRetry();return result}catch(error){console.error('AlMeezan sync:',error);emitStatus({state:'error',message:String(error?.message||error)});if(pendingCount())scheduleRetry();if(manual)window.AlMezan?.toast?.('تعذر الاتصال الآن. بياناتك محفوظة وسيعيد النظام المزامنة تلقائياً.','warning',5200);return{error:true,message:String(error?.message||error),remaining:pendingCount()}}finally{busy=false;emitStatus()}}
+  function schedule(delay=800){if(!pendingCount())return;clearTimeout(timer);timer=setTimeout(()=>syncNow({manual:false}).catch(()=>{}),Math.max(100,Number(delay)||800))}
+  async function initialize(db,{seed=false}={}){const t=tenant();if(!t)return{tenant:''};try{await navigator.storage?.persist?.()}catch(_){}const mirror=await readMirror(t).catch(()=>null),fastSavedAt=Number(localStorage.getItem(DB_SAVED_PREFIX+encodeURIComponent(t))||0),current=db||window.AlMezan?.db||{},currentBusiness=businessRecordCount(current),mirrorBusiness=businessRecordCount(mirror?.db||{}),preferBusinessMirror=currentBusiness===0&&mirrorBusiness>0;if(mirror?.db&&(preferBusinessMirror||window.AlMezan?.hasTenantLocalData?.()===false||Number(mirror.savedAt||0)>fastSavedAt)){suppress=true;try{window.AlMezan.replaceDBFromSync(mirror.db)}finally{suppress=false}db=window.AlMezan.db}snapshot=snapshotDb(db||window.AlMezan?.db||{});initialized=true;if(seed)seedAll(db||window.AlMezan.db);emitStatus();setTimeout(async()=>{const localBusiness=businessRecordCount(window.AlMezan?.db||{});if(localBusiness===0){const recovered=await recoverIfEmpty({silent:true});if(recovered?.recovered)return}if(pendingCount())schedule(250);else checkRemote({force:true}).catch(()=>{})},220);return{tenant:t,pending:pendingCount(),mirror:!!mirror,restoredMirror:preferBusinessMirror}}
+  function resetForTenant(db){schemaTenant='';initialized=false;clearRetry();snapshot=snapshotDb(db||{});emitStatus()}
+  function isRemoteEmptyResult(result){return Number(result?.remoteRows||0)===0}
+  function needsBootstrap(){const m=readMeta();return !m.batchInitialized&&pendingCount()===0}
+  function requestSync(delay=250){if(pendingCount())schedule(delay)}
+  function queueBackupSnapshot(db,{clearExisting=true,includeKnownDeletes=true}={}){
+    const t=tenant();if(!t)return{queued:0,deletions:0,datasets:0,unavailable:true};
+    // استعادة النسخة تعتبر إدخالا يدويا كاملا: نلغي أي طابور قديم حتى لا يكتب
+    // تغييرات سابقة فوق النسخة المستعادة، ثم نضع snapshot كامل لكل أقسام النظام.
+    if(clearExisting){
+      try{localStorage.removeItem(pendingKey(t))}catch(_){}
+      try{localStorage.removeItem(LEGACY_PENDING_PREFIX+encodeURIComponent(t))}catch(_){}
+      try{localStorage.removeItem(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(t))}catch(_){}
+      try{localStorage.removeItem(failedKey(t))}catch(_){}
+      clearTimeout(timer);timer=null;clearRetry();
+    }
+    const source=db||window.AlMezan?.db||{},next=snapshotDb(source),meta=readMeta(),pending=readPending(),dev=deviceId(),known=Object.keys(meta.records||{}),knownByDataset=new Map();
+    for(const pk of known){const cut=String(pk).indexOf('\u0001');if(cut<1)continue;const dataset=String(pk).slice(0,cut),key=String(pk).slice(cut+1);if(!knownByDataset.has(dataset))knownByDataset.set(dataset,new Set());knownByDataset.get(dataset).add(key)}
+    const datasets=new Set([...Object.keys(next),...(includeKnownDeletes?[...knownByDataset.keys()]:[])]);let rev=Date.now()*1000+Math.floor(Math.random()*500),queued=0,deletions=0;
+    for(const dataset of datasets){
+      const currentKeys=new Set(Object.keys(next[dataset]?.map||{}));
+      for(const key of currentKeys){
+        const pk=pkey(dataset,key),opRev=rev++;
+        pending[pk]={dataset,key,deleted:false,rev:opRev,deviceId:dev,mode:'snapshotReplace',imported:true};
+        meta.records[pk]={...(meta.records[pk]||{}),rev:opRev,deleted:false};queued++;
       }
-
-      const envelope = { v: deleted ? null : current, deleted, rev: Number(op.rev || nextRev()), deviceId: op.deviceId || deviceId() };
-      statements.push({
-        sql: `INSERT INTO ${s.table}(path,payload,deleted,updated_at,sync_batch) VALUES(?,?,?,?,(SELECT batch FROM ${s.metaTable} WHERE id=1))
-              ON CONFLICT(path) DO UPDATE SET payload=excluded.payload,deleted=excluded.deleted,updated_at=excluded.updated_at,sync_batch=excluded.sync_batch`,
-        args: [cloudPath(op.dataset, op.key), JSON.stringify(envelope), deleted ? 1 : 0, Number(op.rev || nextRev())]
-      });
-    }
-
-    if (maxSaleSeq > 0) statements.push({
-      sql: `INSERT INTO ${s.seqTable}(name,value) VALUES('sale',?) ON CONFLICT(name) DO UPDATE SET value=CASE WHEN excluded.value>value THEN excluded.value ELSE value END`,
-      args: [maxSaleSeq]
-    });
-    statements.push({ sql: 'COMMIT', args: [] });
-    return statements;
-  }
-
-  function removePendingIfSame(pk, op) {
-    const latest = readPending();
-    if (Number(latest[pk]?.rev || 0) === Number(op.rev || 0)) {
-      delete latest[pk];
-      writePending(latest);
-      return true;
-    }
-    return false;
-  }
-  function markOperationFailure(pk, op, error) {
-    const latest = readPending();
-    const current = latest[pk];
-    if (!current || Number(current.rev || 0) !== Number(op.rev || 0)) return false;
-    current.attempts = Number(current.attempts || 0) + 1;
-    current.lastError = String(error?.message || error || 'فشل غير معروف').slice(0, 500);
-    current.lastAttemptAt = Date.now();
-    // After repeated record-specific failure, quarantine it so one malformed row never blocks the company.
-    if (current.attempts >= 4) {
-      delete latest[pk];
-      const failed = readFailed();
-      failed[pk] = { ...current, failedAt: Date.now() };
-      writeFailed(failed);
-    }
-    writePending(latest);
-    return true;
-  }
-
-  async function pushPending() {
-    const entries = Object.entries(readPending());
-    if (!entries.length) return { uploaded: 0, remaining: 0, skipped: 0 };
-    const s = await ensureSyncSchema(), appDb = window.AlMezan?.db || {};
-    let uploaded = 0, skipped = 0;
-    const batchSize = entries.some(([, op]) => op?.imported === true) ? IMPORT_PUSH_BATCH_SIZE : PUSH_BATCH_SIZE;
-
-    for (let offset = 0; offset < entries.length; offset += batchSize) {
-      const batch = entries.slice(offset, offset + batchSize);
-      try {
-        await s.direct.pipeline(s.cfg, buildPushStatements(s, batch, appDb), Math.max(30000, batch.length * 1000));
-        for (const [pk, op] of batch) if (removePendingIfSame(pk, op)) uploaded++;
-      } catch (batchError) {
-        console.warn('[AlMeezan Sync v5] batch write failed; isolating records.', batchError);
-        for (const pair of batch) {
-          const [pk, op] = pair;
-          try {
-            await s.direct.pipeline(s.cfg, buildPushStatements(s, [pair], appDb), 30000);
-            if (removePendingIfSame(pk, op)) uploaded++;
-          } catch (error) {
-            markOperationFailure(pk, op, error);
-            skipped++;
-            console.warn('[AlMeezan Sync v5] record write failed', op?.dataset, op?.key, error);
-          }
+      if(includeKnownDeletes){
+        for(const key of (knownByDataset.get(dataset)||[]))if(!currentKeys.has(key)){
+          const pk=pkey(dataset,key),opRev=rev++;
+          pending[pk]={dataset,key,deleted:true,rev:opRev,deviceId:dev,mode:'snapshotReplace',imported:true};
+          meta.records[pk]={...(meta.records[pk]||{}),rev:opRev,deleted:true};queued++;deletions++;
         }
       }
     }
-    const meta = readMeta(); meta.lastPushAt = Date.now(); writeMeta(meta);
-    return { uploaded, skipped, failed: failedCount(), remaining: pendingCount() };
+    writeMeta(meta);writePending(pending);snapshot=next;mirrorDb(source).catch(()=>{});emitStatus({state:'backup-import-queued',importQueued:queued,importDeletions:deletions});
+    if(queued)schedule(60);
+    return{queued,deletions,datasets:datasets.size,remaining:pendingCount(),failed:failedCount()}
   }
-
-  async function applyRows(rows, remoteBatch) {
-    const pending = readPending(), meta = readMeta(), current = clone(window.AlMezan?.db || {});
-    const changedDatasets = new Set(), changedRecords = {};
-    let applied = 0;
-
-    for (const row of rows) {
-      const parsed = parseCloudPath(row.path); if (!parsed) continue;
-      let envelope = row.payload;
-      if (typeof envelope === 'string') { try { envelope = JSON.parse(envelope); } catch (_) { envelope = null; } }
-      const deleted = Number(row.deleted) === 1 || envelope?.deleted === true;
-      let value = envelope && Object.prototype.hasOwnProperty.call(envelope, 'v') ? envelope.v : envelope;
-      if (!allowRemoteRecordForRole(parsed.dataset, parsed.key, value)) continue;
-
-      const pk = pkey(parsed.dataset, parsed.key);
-      const rowBatch = Number(row.sync_batch || 0);
-      const knownBatch = Number(meta.records?.[pk]?.batch || 0);
-      const localPendingRev = pendingRevForRecord(pending, parsed.dataset, parsed.key);
-      const qtyDataset = isQtyDataset(parsed.dataset);
-
-      // A normal locally edited row must not be overwritten while its newer local state is waiting to upload.
-      if (!qtyDataset && localPendingRev > 0) continue;
-      if (!qtyDataset && rowBatch > 0 && knownBatch >= rowBatch) continue;
-
-      // Stock is merged: cloud quantity + still-unuploaded local deltas.
-      if (qtyDataset && !deleted && value && localPendingRev > 0) {
-        value = clone(value);
-        value.qtyBase = Number((Number(value.qtyBase || 0) + pendingQtyDelta(pending, parsed.dataset, parsed.key)).toFixed(8));
-      }
-
-      const before = getRecord(current, parsed.dataset, parsed.key);
-      const beforeHash = before === undefined ? '__missing__' : hashText(stableJson(before));
-      const afterHash = deleted ? '__deleted__' : hashText(stableJson(value));
-      if (qtyDataset && rowBatch > 0 && knownBatch >= rowBatch && beforeHash === afterHash) continue;
-
-      applyRecord(current, parsed.dataset, parsed.key, value, deleted);
-      meta.records[pk] = {
-        rev: Number(row.updated_at || envelope?.rev || 0), batch: rowBatch, deleted,
-        hash: deleted ? '' : hashText(stableJson(value))
-      };
-      changedDatasets.add(parsed.dataset);
-      (changedRecords[parsed.dataset] || (changedRecords[parsed.dataset] = [])).push(parsed.key);
-      applied++;
-    }
-
-    meta.protocol = 5;
-    meta.remoteBatch = Math.max(Number(meta.remoteBatch || 0), Number(remoteBatch || 0));
-    meta.batchInitialized = true;
-    meta.lastPullAt = Date.now();
-    meta.lastSuccessAt = Date.now();
-    writeMeta(meta);
-
-    const detail = { at: Date.now(), datasets: [...changedDatasets], records: changedRecords, remoteBatch: Number(remoteBatch || 0), applied };
-    if (applied && window.AlMezan?.replaceDBFromSync) {
-      suppress = true;
-      try { window.AlMezan.replaceDBFromSync(current, detail); }
-      finally { suppress = false; }
-      snapshot = snapshotDb(window.AlMezan.db);
-      await mirrorDb(window.AlMezan.db).catch(() => {});
-    }
-    return { applied, detail };
+  function clearQueue({includeFailed=true}={}){
+    const pending=pendingCount(),failed=failedCount();
+    try{localStorage.removeItem(pendingKey())}catch(_){}
+    try{localStorage.removeItem(LEGACY_PENDING_PREFIX+encodeURIComponent(tenant()||'none'))}catch(_){}
+    try{localStorage.removeItem(VERY_LEGACY_PENDING_PREFIX+encodeURIComponent(tenant()||'none'))}catch(_){}
+    if(includeFailed)try{localStorage.removeItem(failedKey())}catch(_){}
+    clearTimeout(timer);timer=null;clearRetry();snapshot=snapshotDb(window.AlMezan?.db||{});emitStatus({state:'queue-cleared'});
+    return{clearedPending:pending,clearedFailed:includeFailed?failed:0,remaining:pendingCount(),failed:failedCount()}
   }
-
-  async function pullChanges({ force = false } = {}) {
-    const s = await ensureSyncSchema(), meta = readMeta();
-    const remoteBatch = await readRemoteBatch(s), last = Number(meta.remoteBatch || 0);
-    if (meta.batchInitialized && !force && remoteBatch <= last) return { applied: 0, remoteRows: 0, remoteBatch, changedDatasets: [] };
-
-    const lo = basePath(), hi = lo + '\uffff';
-    let rows = [];
-    if (!meta.batchInitialized) {
-      const [r] = await retryRead(() => s.direct.pipeline(s.cfg, [{
-        sql: `SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? ORDER BY path`, args: [lo, hi]
-      }], 60000), 3);
-      rows = rowsOf(s.direct, r);
-    } else if (remoteBatch > last || force) {
-      const [r] = await retryRead(() => s.direct.pipeline(s.cfg, [{
-        sql: `SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? AND sync_batch>? ORDER BY sync_batch ASC,path ASC`, args: [lo, hi, last]
-      }], 60000), 3);
-      rows = rowsOf(s.direct, r);
-    }
-    const out = await applyRows(rows, remoteBatch);
-    return {
-      applied: out.applied, remoteRows: rows.length, remoteBatch,
-      changedDatasets: out.detail?.datasets || [], changedRecords: out.detail?.records || {},
-      bootstrap: !meta.batchInitialized
-    };
-  }
-
-  const BUSINESS_DATASETS = new Set(['sales','purchases','products','customers','suppliers','stock','repStock','journals','vouchers','cheques','installmentContracts','installmentSchedule','transfers','transferRequests','itemPrices','finance','expenses','revenues','wastageDocs','productBatches']);
-  function businessRecordCount(db) {
-    const keys = ['sales','purchases','products','suppliers','stock','journals','vouchers','cheques','installmentContracts','transfers','transferRequests'];
-    return keys.reduce((n, k) => n + (Array.isArray(db?.[k]) ? db[k].length : 0), 0);
-  }
-  function pendingBusinessCount() {
-    return Object.values(readPending()).filter(op => BUSINESS_DATASETS.has(String(op?.dataset || ''))).length;
-  }
-
-  async function pullFull({ reason = 'manual' } = {}) {
-    if (!tenant()) return { unavailable: true, reason };
-    if (navigator.onLine === false) return { offline: true, reason };
-    if (pendingCount() > 0) {
-      const risky = pendingBusinessCount();
-      if (risky > 0) return { blocked: true, reason, message: `يوجد ${risky} تغيير محلي تجاري معلق؛ قم بمزامنته أولاً حتى لا تضيع أي حركة.` };
-      writePending({});
-    }
-    const s = await ensureSyncSchema(), remoteBatch = await readRemoteBatch(s), lo = basePath(), hi = lo + '\uffff';
-    const [r] = await retryRead(() => s.direct.pipeline(s.cfg, [{
-      sql: `SELECT path,payload,deleted,updated_at,sync_batch FROM ${s.table} WHERE path>=? AND path<? ORDER BY path`, args: [lo, hi]
-    }], 60000), 3);
-    const rows = rowsOf(s.direct, r);
-    if (!rows.length) return { applied: 0, remoteRows: 0, remoteBatch, empty: true, reason };
-
-    const old = readMeta();
-    writeMeta({ ...old, protocol: 5, records: {}, remoteBatch: 0, batchInitialized: false });
-    try {
-      const out = await applyRows(rows, remoteBatch);
-      emitStatus({ state: 'success', recovered: true });
-      return { applied: out.applied, remoteRows: rows.length, remoteBatch, changedDatasets: out.detail?.datasets || [], changedRecords: out.detail?.records || {}, recovered: true, reason };
-    } catch (error) { writeMeta(old); throw error; }
-  }
-
-  async function recoverIfEmpty({ silent = true } = {}) {
-    if (!tenant() || navigator.onLine === false) return { skipped: true };
-    const localCount = businessRecordCount(window.AlMezan?.db || {});
-    if (localCount > 0) return { skipped: true, localCount };
-    try {
-      const r = await pullFull({ reason: 'empty-local-recovery' });
-      if (r?.remoteRows > 0 && !silent) window.AlMezan?.toast?.(`تمت استعادة البيانات القديمة من قاعدة الشركة (${r.applied || 0} سجل).`, 'success', 5200);
-      return r;
-    } catch (error) {
-      console.warn('[AlMeezan Sync v5] empty-local recovery failed', error);
-      return { error: true, message: String(error?.message || error) };
-    }
-  }
-
-  function probeInterval() {
-    const idleFor = Date.now() - lastActivityAt;
-    if (idleFor > VERY_IDLE_WINDOW_MS) return PROBE_VERY_IDLE_MS;
-    if (idleFor > ACTIVITY_WINDOW_MS) return PROBE_IDLE_MS;
-    return window.AlMezan?.state?.view === 'cashier' ? PROBE_ACTIVE_CASHIER_MS : PROBE_ACTIVE_MS;
-  }
-
-  async function checkRemote({ force = false } = {}) {
-    if (busy || !tenant() || navigator.onLine === false || document.visibilityState === 'hidden') return { skipped: true };
-    const now = Date.now(), interval = pendingCount() ? Math.min(1800, probeInterval()) : probeInterval();
-    if (!force && now - lastProbeAt < Math.max(900, interval - 150)) return { throttled: true };
-    lastProbeAt = now;
-    try {
-      if (pendingCount()) return syncNow({ manual: false, force: true, checkRemote: true });
-      const s = await ensureSyncSchema(), remote = await readRemoteBatch(s), meta = readMeta(), local = Number(meta.remoteBatch || 0);
-      if (!meta.batchInitialized || remote > local) return syncNow({ manual: false, force: false, checkRemote: true });
-      return { changed: false, remoteBatch: remote };
-    } catch (error) {
-      if (pendingCount()) scheduleRetry();
-      return { error: true, message: String(error?.message || error) };
-    }
-  }
-
-  function clearRetry() { clearTimeout(retryTimer); retryTimer = null; retryAttempt = 0; }
-  function scheduleRetry() {
-    if (!pendingCount() || navigator.onLine === false) return;
-    clearTimeout(retryTimer);
-    retryAttempt = Math.min(retryAttempt + 1, 6);
-    const delay = Math.min(20000, 1000 * Math.pow(2, retryAttempt - 1));
-    emitStatus({ state: 'retrying', retryIn: delay });
-    retryTimer = setTimeout(() => { retryTimer = null; syncNow({ manual: false, force: true, checkRemote: true }).catch(() => {}); }, delay);
-  }
-
-  async function syncNow({ manual = false, force = false, checkRemote: wantRemote = false } = {}) {
-    if (busy) {
-      if (manual) window.AlMezan?.toast?.('المزامنة جارية الآن.', 'warning');
-      return { busy: true, remaining: pendingCount() };
-    }
-    if (!tenant()) return { unavailable: true, remaining: pendingCount() };
-    if (navigator.onLine === false) {
-      emitStatus({ state: 'offline' });
-      if (manual) window.AlMezan?.toast?.('أنت دون إنترنت. التغييرات محفوظة محلياً وستُرسل عند عودة الاتصال.', 'warning');
-      return { offline: true, remaining: pendingCount() };
-    }
-
-    const hasPending = pendingCount() > 0;
-    if (!manual && !force && !wantRemote && !hasPending) return { idle: true, remaining: 0 };
-    busy = true; emitStatus({ state: 'syncing' });
-    try {
-      const pushed = hasPending ? await pushPending() : { uploaded: 0, remaining: 0, skipped: 0 };
-      const pulled = (manual || wantRemote || hasPending) ? await pullChanges({ force: manual }) : { applied: 0, remoteRows: 0, changedDatasets: [] };
-      const result = { ...pushed, ...pulled, remaining: pendingCount(), success: true, engine: VERSION };
-      clearRetry();
-      emitStatus({ state: 'success', lastSuccessAt: Date.now() });
-      try { window.dispatchEvent(new CustomEvent('almezan:sync-complete', { detail: result })); } catch (_) {}
-      broadcast({ type: 'synced', batch: Number(result.remoteBatch || readMeta().remoteBatch || 0), at: Date.now() });
-      if (manual) {
-        const failed = failedCount();
-        const text = failed
-          ? `اكتملت المزامنة، لكن توجد ${failed} حركة معطلة محفوظة محلياً وتحتاج مراجعة.`
-          : result.remaining
-            ? `تمت المزامنة وبقي ${result.remaining} تغيير معلق وسيعاد إرساله تلقائياً.`
-            : result.applied
-              ? `اكتملت المزامنة وتحدثت الشاشة (${result.applied} تغيير).`
-              : 'اكتملت المزامنة — البيانات محدثة.';
-        window.AlMezan?.toast?.(text, failed ? 'warning' : 'success', failed ? 5200 : undefined);
-      }
-      if (result.remaining) scheduleRetry();
-      return result;
-    } catch (error) {
-      console.error('[AlMeezan Sync v5]', error);
-      emitStatus({ state: 'error', message: String(error?.message || error) });
-      if (pendingCount()) scheduleRetry();
-      if (manual) window.AlMezan?.toast?.('تعذر الاتصال الآن. بياناتك محفوظة وسيعيد النظام المزامنة تلقائياً.', 'warning', 5200);
-      return { error: true, message: String(error?.message || error), remaining: pendingCount() };
-    } finally {
-      busy = false; emitStatus();
-    }
-  }
-
-  function requestSync(delay = 120) {
-    if (!pendingCount()) return;
-    clearTimeout(syncTimer);
-    syncTimer = setTimeout(() => syncNow({ manual: false, force: true, checkRemote: true }).catch(() => {}), Math.max(50, Number(delay) || 120));
-  }
-
-  async function initialize(db, { seed = false } = {}) {
-    const t = tenant(); if (!t) return { tenant: '' };
-    migrateLegacyOnce(t);
-    try { await navigator.storage?.persist?.(); } catch (_) {}
-
-    const mirror = await readMirror(t).catch(() => null);
-    const fastSavedAt = Number(localStorage.getItem(DB_SAVED_PREFIX + encodeURIComponent(t)) || 0);
-    const current = db || window.AlMezan?.db || {};
-    const currentBusiness = businessRecordCount(current), mirrorBusiness = businessRecordCount(mirror?.db || {});
-    const preferBusinessMirror = currentBusiness === 0 && mirrorBusiness > 0;
-
-    if (mirror?.db && (preferBusinessMirror || window.AlMezan?.hasTenantLocalData?.() === false || Number(mirror.savedAt || 0) > fastSavedAt)) {
-      suppress = true;
-      try { window.AlMezan.replaceDBFromSync(mirror.db); }
-      finally { suppress = false; }
-      db = window.AlMezan.db;
-    }
-
-    snapshot = snapshotDb(db || window.AlMezan?.db || {});
-    initialized = true;
-    if (seed) seedAll(db || window.AlMezan.db);
-    emitStatus({ state: 'ready' });
-    startProbeLoop();
-
-    setTimeout(async () => {
-      const localBusiness = businessRecordCount(window.AlMezan?.db || {});
-      if (localBusiness === 0) {
-        const recovered = await recoverIfEmpty({ silent: true });
-        if (recovered?.recovered) return;
-      }
-      if (pendingCount()) requestSync(100);
-      else checkRemote({ force: true }).catch(() => {});
-    }, 160);
-    return { tenant: t, pending: pendingCount(), mirror: !!mirror, restoredMirror: preferBusinessMirror, engine: VERSION };
-  }
-
-  function resetForTenant(db) {
-    schemaTenant = '';
-    initialized = false;
-    clearRetry();
-    clearTimeout(syncTimer); syncTimer = null;
-    snapshot = snapshotDb(db || {});
-    migrateLegacyOnce();
-    emitStatus({ state: 'tenant-reset' });
-  }
-
-  function isRemoteEmptyResult(result) { return Number(result?.remoteRows || 0) === 0; }
-  function needsBootstrap() { const m = readMeta(); return !m.batchInitialized && pendingCount() === 0; }
-
-  function queueBackupSnapshot(db, { clearExisting = true, includeKnownDeletes = true } = {}) {
-    const t = tenant(); if (!t) return { queued: 0, deletions: 0, datasets: 0, unavailable: true };
-    if (clearExisting) {
-      try { localStorage.removeItem(pendingKey(t)); } catch (_) {}
-      try { localStorage.removeItem(failedKey(t)); } catch (_) {}
-      clearTimeout(syncTimer); syncTimer = null; clearRetry();
-    }
-
-    const source = db || window.AlMezan?.db || {}, next = snapshotDb(source), meta = readMeta(), pending = readPending(), dev = deviceId();
-    const knownByDataset = new Map();
-    for (const pk of Object.keys(meta.records || {})) {
-      const cut = String(pk).indexOf('\u0001'); if (cut < 1) continue;
-      const dataset = String(pk).slice(0, cut), key = String(pk).slice(cut + 1);
-      if (!knownByDataset.has(dataset)) knownByDataset.set(dataset, new Set());
-      knownByDataset.get(dataset).add(key);
-    }
-
-    const datasets = new Set([...Object.keys(next), ...(includeKnownDeletes ? [...knownByDataset.keys()] : [])]);
-    let queued = 0, deletions = 0;
-    for (const dataset of datasets) {
-      const currentKeys = new Set(Object.keys(next[dataset]?.map || {}));
-      for (const key of currentKeys) {
-        const pk = pkey(dataset, key), rev = nextRev();
-        pending[pk] = { dataset, key, deleted: false, rev, deviceId: dev, mode: 'snapshotReplace', imported: true, attempts: 0 };
-        meta.records[pk] = { ...(meta.records[pk] || {}), rev, deleted: false };
-        queued++;
-      }
-      if (includeKnownDeletes) {
-        for (const key of (knownByDataset.get(dataset) || [])) if (!currentKeys.has(key)) {
-          const pk = pkey(dataset, key), rev = nextRev();
-          pending[pk] = { dataset, key, deleted: true, rev, deviceId: dev, mode: 'snapshotReplace', imported: true, attempts: 0 };
-          meta.records[pk] = { ...(meta.records[pk] || {}), rev, deleted: true };
-          queued++; deletions++;
-        }
-      }
-    }
-    writeMeta(meta); writePending(pending); snapshot = next; mirrorDb(source).catch(() => {});
-    emitStatus({ state: 'backup-import-queued', importQueued: queued, importDeletions: deletions });
-    if (queued) requestSync(60);
-    return { queued, deletions, datasets: datasets.size, remaining: pendingCount(), failed: failedCount() };
-  }
-
-  function clearQueue({ includeFailed = true } = {}) {
-    const p = pendingCount(), f = failedCount();
-    try { localStorage.removeItem(pendingKey()); } catch (_) {}
-    if (includeFailed) try { localStorage.removeItem(failedKey()); } catch (_) {}
-    clearTimeout(syncTimer); syncTimer = null; clearRetry();
-    snapshot = snapshotDb(window.AlMezan?.db || {});
-    emitStatus({ state: 'queue-cleared' });
-    return { clearedPending: p, clearedFailed: includeFailed ? f : 0, remaining: pendingCount(), failed: failedCount() };
-  }
-
-  function broadcast(message) {
-    try { bc?.postMessage?.({ ...message, tenant: tenant(), deviceId: deviceId() }); } catch (_) {}
-  }
-  function setupBroadcastChannel() {
-    try {
-      bc?.close?.();
-      bc = 'BroadcastChannel' in window ? new BroadcastChannel('almezan-sync-v5') : null;
-      if (bc) bc.onmessage = event => {
-        const msg = event.data || {};
-        if (msg.tenant !== tenant() || msg.deviceId === deviceId()) return;
-        if (msg.type === 'synced' || msg.type === 'local-change') setTimeout(() => checkRemote({ force: true }).catch(() => {}), msg.type === 'local-change' ? 180 : 20);
-      };
-    } catch (_) { bc = null; }
-  }
-
-  function startProbeLoop() {
-    if (probeTimer) return;
-    const tick = async () => {
-      try { await checkRemote(); } catch (_) {}
-      probeTimer = setTimeout(tick, Math.max(900, Math.min(5000, probeInterval())));
-    };
-    probeTimer = setTimeout(tick, 900);
-  }
-
-  ['pointerdown', 'keydown', 'input', 'touchstart'].forEach(type => document.addEventListener(type, () => { lastActivityAt = Date.now(); }, { capture: true, passive: true }));
-  window.addEventListener('online', () => { retryAttempt = 0; lastActivityAt = Date.now(); pendingCount() ? requestSync(80) : checkRemote({ force: true }).catch(() => {}); });
-  window.addEventListener('offline', () => emitStatus({ state: 'offline' }));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { lastActivityAt = Date.now(); setTimeout(() => checkRemote({ force: true }).catch(() => {}), 120); } });
-  window.addEventListener('focus', () => { lastActivityAt = Date.now(); checkRemote({ force: true }).catch(() => {}); });
-  window.addEventListener('almezan:local-save', () => broadcast({ type: 'local-change', at: Date.now() }));
-  setupBroadcastChannel();
-  startProbeLoop();
-
-  window.AlMezanSync = {
-    version: VERSION,
-    capture, seedAll, queueBackupSnapshot, initialize, resetForTenant,
-    syncNow, pushPending, pullAll: pullFull, pullFull, recoverIfEmpty, pullChanges, checkRemote,
-    pendingCount, failedCount, clearQueue, mirrorDb, readMirror,
-    isRemoteEmptyResult, needsBootstrap, requestSync,
-    peekDocumentNumber, reserveDocumentNumber, claimDocumentNumber,
-    get busy() { return busy; },
-    get suppress() { return suppress; }
-  };
+  ['pointerdown','keydown','input','touchstart'].forEach(type=>document.addEventListener(type,()=>{lastActivityAt=Date.now()},{capture:true,passive:true}));window.addEventListener('online',()=>{retryAttempt=0;lastActivityAt=Date.now();if(pendingCount())schedule(200);else checkRemote({force:true}).catch(()=>{})});window.addEventListener('offline',()=>emitStatus({state:'offline'}));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){lastActivityAt=Date.now();setTimeout(()=>checkRemote({force:true}).catch(()=>{}),350)}});window.addEventListener('focus',()=>{lastActivityAt=Date.now();checkRemote({force:true}).catch(()=>{})});setInterval(()=>checkRemote().catch(()=>{}),900);
+  window.AlMezanSync={version:4.3,capture,seedAll,queueBackupSnapshot,initialize,resetForTenant,syncNow,pushPending,pullAll:pullFull,pullFull,recoverIfEmpty,pullChanges,checkRemote,pendingCount,failedCount,clearQueue,mirrorDb,readMirror,isRemoteEmptyResult,needsBootstrap,requestSync,peekDocumentNumber,reserveDocumentNumber,claimDocumentNumber,get busy(){return busy},get suppress(){return suppress}};
 })();

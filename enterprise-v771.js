@@ -8,21 +8,10 @@ const FONT_MIN=.80,FONT_MAX=1.30,FONT_STEP=.05;
 let fontScale=Math.max(FONT_MIN,Math.min(FONT_MAX,Number(localStorage.getItem(FONT_KEY)||1)||1));
 
 /* ---------- Local-only whole-system font scaling ---------- */
-const FIXED_CART_FONT_SELECTOR='.cashier-page .cart-item, .cashier-page .cart-item *';
-function isFixedCartFont(el){return !!el?.matches?.(FIXED_CART_FONT_SELECTOR)}
-function resetFixedCartFonts(root=document){
-  const list=[];
-  if(root?.nodeType===1&&isFixedCartFont(root))list.push(root);
-  if(root?.querySelectorAll)list.push(...root.querySelectorAll(FIXED_CART_FONT_SELECTOR));
-  for(const el of list){
-    if(el?.dataset?.v771BaseFont){el.style.removeProperty('font-size');delete el.dataset.v771BaseFont}
-  }
-}
 function fontCandidates(root=document){
   const list=[];if(root?.nodeType===1)list.push(root);
   if(root?.querySelectorAll)list.push(...root.querySelectorAll('*'));
   return list.filter(el=>{
-    if(isFixedCartFont(el))return false;
     const tag=el.tagName;if(!tag||['SCRIPT','STYLE','SVG','PATH','IMG','CANVAS','VIDEO','AUDIO','BR','HR'].includes(tag))return false;
     if(['INPUT','TEXTAREA','SELECT','BUTTON','OPTION'].includes(tag))return true;
     if(el.childElementCount===0&&String(el.textContent||'').trim())return true;
@@ -31,7 +20,6 @@ function fontCandidates(root=document){
 }
 function applyFontScale(root=document,scale=fontScale){
   scale=Math.max(FONT_MIN,Math.min(FONT_MAX,Number(scale)||1));fontScale=scale;
-  resetFixedCartFonts(root);
   document.documentElement.style.setProperty('--almezan-font-scale',String(scale));
   document.documentElement.dataset.uiFontScale=String(Math.round(scale*100));
   const els=fontCandidates(root),pending=[];

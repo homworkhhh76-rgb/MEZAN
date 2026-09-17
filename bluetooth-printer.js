@@ -128,10 +128,9 @@
     const finalH=Math.min(canvas.height,Math.ceil(y+Math.round(10*scale))),out=document.createElement('canvas');out.width=width;out.height=finalH;out.getContext('2d').drawImage(canvas,0,0,width,finalH,0,0,width,finalH);return out;
   }
   function rasterBytes(canvas){
-    const ctx=canvas.getContext('2d'),img=ctx.getImageData(0,0,canvas.width,canvas.height),widthBytes=Math.ceil(canvas.width/8),data=new Uint8Array(widthBytes*canvas.height);
-    for(let y=0;y<canvas.height;y++)for(let xb=0;xb<widthBytes;xb++){let b=0;for(let bit=0;bit<8;bit++){const x=xb*8+bit;if(x>=canvas.width)continue;const i=(y*canvas.width+x)*4,r=img.data[i],g=img.data[i+1],bl=img.data[i+2],a=img.data[i+3],lum=(.299*r+.587*g+.114*bl)*(a/255)+255*(1-a/255);if(lum<165)b|=(0x80>>bit)}data[y*widthBytes+xb]=b}
-    const header=new Uint8Array([0x1b,0x40,0x1b,0x61,0x01,0x1d,0x76,0x30,0x00,widthBytes&255,(widthBytes>>8)&255,canvas.height&255,(canvas.height>>8)&255]);
-    const tail=new Uint8Array([0x0a,0x0a,0x0a,0x1d,0x56,0x00]);const out=new Uint8Array(header.length+data.length+tail.length);out.set(header,0);out.set(data,header.length);out.set(tail,header.length+data.length);return out;
+    const ctx=canvas.getContext('2d'),img=ctx.getImageData(0,0,canvas.width,canvas.height),widthBytes=Math.ceil(canvas.width/8),parts=[new Uint8Array([0x1b,0x40,0x1b,0x61,0x01])],bandRows=192;
+    for(let y0=0;y0<canvas.height;y0+=bandRows){const h=Math.min(bandRows,canvas.height-y0),data=new Uint8Array(widthBytes*h);for(let y=0;y<h;y++)for(let xb=0;xb<widthBytes;xb++){let b=0;for(let bit=0;bit<8;bit++){const x=xb*8+bit;if(x>=canvas.width)continue;const i=((y0+y)*canvas.width+x)*4,r=img.data[i],g=img.data[i+1],bl=img.data[i+2],a=img.data[i+3],lum=(.299*r+.587*g+.114*bl)*(a/255)+255*(1-a/255);if(lum<165)b|=(0x80>>bit)}data[y*widthBytes+xb]=b}parts.push(new Uint8Array([0x1d,0x76,0x30,0x00,widthBytes&255,(widthBytes>>8)&255,h&255,(h>>8)&255]),data)}
+    parts.push(new Uint8Array([0x0a,0x0a,0x0a,0x1d,0x56,0x00]));const len=parts.reduce((n,x)=>n+x.length,0),out=new Uint8Array(len);let at=0;for(const x of parts){out.set(x,at);at+=x.length}return out;
   }
   async function writePiece(ch,bytes){
     const view=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
@@ -140,14 +139,18 @@
     return ch.writeValue(view);
   }
   async function writeBytes(bytes){
-    const ch=state.characteristic;if(!ch)throw new Error('الطابعة غير متصلة.');let pos=0,chunk=180;
-    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}if(pos%3600<chunk)await new Promise(r=>setTimeout(r,2))}
+    const ch=state.characteristic;if(!ch)throw new Error('الطابعة غير متصلة.');let pos=0,chunk=120;
+    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}await new Promise(r=>setTimeout(r,4))}
   }
   function readPrintGuard(){try{return JSON.parse(localStorage.getItem(PRINT_GUARD_KEY)||'null')||null}catch(_){return null}}
   function writePrintGuard(saleId){try{localStorage.setItem(PRINT_GUARD_KEY,JSON.stringify({saleId:String(saleId||''),at:Date.now()}))}catch(_){}}
   function recentlyPrinting(saleId){const g=readPrintGuard();return !!(state.printing||state.printingSaleId===String(saleId||'')||(g&&g.saleId===String(saleId||'')&&Date.now()-Number(g.at||0)<PRINT_GUARD_MS))}
   async function printInvoice(sale){
     if(!sale)throw new Error('الفاتورة غير موجودة.');const s=settings();
+    const pm=window.AlMezanPrinterManager,pmSettings=pm?.settings,managedDefault=pmSettings?.defaults?.invoice;
+    if(pm?.printInvoiceById&&managedDefault&&Array.isArray(pmSettings?.printers)&&pmSettings.printers.some(p=>p.id===managedDefault)){
+      return pm.printInvoiceById(sale.id);
+    }
     if(recentlyPrinting(sale.id))return false;
     if(s.printerConnection!=='bluetooth'||s.printSize==='a4'||!support()){A.openInvoicePrintOnce?.(sale.id);return true}
     state.printing=true;state.printingSaleId=String(sale.id||'');writePrintGuard(sale.id);emit();
@@ -163,10 +166,9 @@
   }
   function printInvoiceById(id){const sale=D()?.sales?.find(x=>x.id===id);return printInvoice(sale)}
   async function printTest(){
-    const sale=D()?.sales?.[0];if(sale)return printInvoice(sale);
-    if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const fake={id:'TEST',number:'TEST-PRINT',date:A.today(),customerName:'طباعة تجريبية',userName:A.currentUser?.()?.name||'المستخدم',branchId:A.state.activeBranchId,lines:[{productName:'اختبار الطابعة الحرارية',unitName:'حبة',qty:1,unitPrice:1,total:1}],subtotal:1,discount:0,tax:0,total:1,paid:1,due:0};const canvas=await receiptCanvas(fake);await writeBytes(rasterBytes(canvas));A.toast?.('تم إرسال ورقة الاختبار للطابعة.','success')
+    if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const fake={id:'TEST-'+Date.now(),number:'TEST-PRINT',date:A.today(),customerName:'طباعة تجريبية',userName:A.currentUser?.()?.name||'المستخدم',branchId:A.state.activeBranchId,lines:[{productName:'اختبار الطابعة الحرارية',unitName:'حبة',qty:1,unitPrice:1,total:1}],subtotal:1,discount:0,tax:0,total:1,paid:1,due:0};const canvas=await receiptCanvas(fake);await writeBytes(rasterBytes(canvas));A.toast?.('تم إرسال ورقة الاختبار للطابعة.','success')
   }
-  window.AlMezanBluetoothPrinter={support,status,connect,connectSaved,disconnect,forget,printInvoice,printInvoiceById,printTest};
+  window.AlMezanBluetoothPrinter={support,status,connect,connectSaved,disconnect,forget,printInvoice,printInvoiceById,printTest,receiptCanvas,rasterBytes};
   window.addEventListener('online',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>{})});
   setTimeout(()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>{})},900);
 })();
