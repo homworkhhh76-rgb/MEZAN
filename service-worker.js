@@ -1,7 +1,7 @@
-const BUILD='7846';
+const BUILD='7847';
 const SCOPE_KEY=(new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'root');
-const CACHE=`almezan-pro-${SCOPE_KEY}-v7846-print-7816-debt-voucher`;
-const IMAGE_CACHE=`almezan-images-${SCOPE_KEY}-v7846`;
+const CACHE=`almezan-pro-${SCOPE_KEY}-v7847-bluetooth-android-rootfix`;
+const IMAGE_CACHE=`almezan-images-${SCOPE_KEY}-v7847`;
 const PAGE_FILES=[
   './index.html','./print-invoice.html','./dashboard.html','./cashier.html','./sales.html','./purchases.html','./debts.html','./installments.html','./products.html','./stock.html','./units.html','./transfers.html','./barcodes.html','./accounts.html','./vouchers.html','./cheques.html','./journals.html','./expenses.html','./reports.html','./customers.html','./customer-groups.html','./price-groups.html','./suppliers.html','./representatives.html','./messaging.html','./branches.html','./warehouses.html','./employees.html','./audit.html','./settings.html','./README.html','./admin.html','./mobile-scanner.html'
 ];

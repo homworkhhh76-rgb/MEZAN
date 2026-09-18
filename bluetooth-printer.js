@@ -5,7 +5,11 @@
   const COMMON_SERVICES=[
     '000018f0-0000-1000-8000-00805f9b34fb',
     '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000fff0-0000-1000-8000-00805f9b34fb',
     '0000ae30-0000-1000-8000-00805f9b34fb',
+    '0000ae3a-0000-1000-8000-00805f9b34fb',
+    '0000af30-0000-1000-8000-00805f9b34fb',
     '49535343-fe7d-4ae5-8fa9-9fafd205e455',
     'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
@@ -23,7 +27,7 @@
   }
   function settings(){
     const s=D()?.settings||{};
-    if(!s.bluetoothServiceUuid)s.bluetoothServiceUuid='18f0';
+    if(s.bluetoothServiceUuid==='18f0')s.bluetoothServiceUuid='';
     if(!s.bluetoothPrintMode)s.bluetoothPrintMode='raster';
     if(s.bluetoothAutoReconnect===undefined)s.bluetoothAutoReconnect=true;
     return s;
@@ -139,8 +143,8 @@
     return ch.writeValue(view);
   }
   async function writeBytes(bytes){
-    const ch=state.characteristic;if(!ch)throw new Error('الطابعة غير متصلة.');let pos=0,chunk=120;
-    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}await new Promise(r=>setTimeout(r,4))}
+    const ch=state.characteristic;if(!ch)throw new Error('الطابعة غير متصلة.');const android=/Android/i.test(navigator.userAgent||'');let pos=0,chunk=android?80:120;
+    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}await new Promise(r=>setTimeout(r,android?9:4));if(android&&pos>0&&pos%2048<chunk)await new Promise(r=>setTimeout(r,24))}if(android)await new Promise(r=>setTimeout(r,180))
   }
   function readPrintGuard(){try{return JSON.parse(localStorage.getItem(PRINT_GUARD_KEY)||'null')||null}catch(_){return null}}
   function writePrintGuard(saleId){try{localStorage.setItem(PRINT_GUARD_KEY,JSON.stringify({saleId:String(saleId||''),at:Date.now()}))}catch(_){}}
