@@ -161,8 +161,8 @@
     if(!raw.settings.defaultPriceGroupId)raw.settings.defaultPriceGroupId='PG-RETAIL';if(!raw.settings.companyUsername)raw.settings.companyUsername='12345';if(raw.settings.keepBarcodeScannerOpen==null)raw.settings.keepBarcodeScannerOpen=false;if(raw.settings.restaurantMode==null)raw.settings.restaurantMode=false;if(raw.settings.restaurantKitchenWarehouseId==null)raw.settings.restaurantKitchenWarehouseId='';const invoiceDefaults={showInvoiceLogo:true,showInvoiceStoreName:true,invoiceLogoSize:'small',showInvoiceBarcode:false,invoiceBarcodeSize:'medium',showInvoiceEmployee:true,showInvoiceOrderType:true,invoiceOrderTypeText:'سفري',showInvoiceCustomer:true,showInvoiceBranch:true,showInvoiceItemNumber:true,showInvoiceUnitColumn:true,showInvoiceQtyColumn:true,showInvoicePriceColumn:true,showInvoiceLineTotal:true,showInvoiceQuantityTotal:true,showInvoiceSubtotal:true,showInvoiceDiscount:true,showInvoiceTax:true,showInvoicePaid:true,showInvoiceDue:true,showInvoiceNetAmount:true,showInvoiceMessage:true,showInvoiceFooterTime:true,showInvoiceFooterNumber:true};for(const [k,v] of Object.entries(invoiceDefaults))if(raw.settings[k]==null)raw.settings[k]=v;if(raw.settings.invoiceTemplateVersion!=='742'){raw.settings.showInvoiceBarcode=false;raw.settings.invoiceTemplateVersion='742';}
     const requiredAccounts=base.accounts.filter(a=>['ACC-1000','ACC-1100','ACC-1110','ACC-1120','ACC-1200','ACC-1300','ACC-1400','ACC-2000','ACC-2100','ACC-2200','ACC-3000','ACC-3200','ACC-4000','ACC-4100','ACC-4230','ACC-5000','ACC-5100','ACC-5200','ACC-5230'].includes(a.id));
     for(const account of requiredAccounts){if(!raw.accounts.some(a=>a.id===account.id))raw.accounts.push({...account})}
-    // v7.25: تشغيل النظام بعملة الشيكل فقط، مع التحكم في ظهور الحسابات بقوائم الدفع.
-    raw.company.currency='₪';
+    // v7.84.8: العملة قابلة للتغيير من الإعدادات ولا يتم فرض الشيكل عند كل تشغيل.
+    if(!String(raw.company.currency||'').trim()) raw.company.currency='₪';
     const paymentBlocked=new Set(['ACC-1200','ACC-1300','ACC-1400','ACC-1500']);
     const accountParents=new Set(raw.accounts.map(a=>a.parentId).filter(Boolean));
     for(const a of raw.accounts){
