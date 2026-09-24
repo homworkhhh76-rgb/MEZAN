@@ -72,8 +72,10 @@
       .filter(b=>b.productId===productId&&b.warehouseId===warehouseId&&num(b.qtyBase)>0)
       .filter(b=>allowExpired||!b.expiryDate||b.expiryDate>=today())
       .sort(lotSort);
-    const items=[]; let remaining=qtyBase;
+    const items=[]; let remaining=qtyBase,allowNegative=!!(D().settings.allowNegative||A.has?.('negative_stock'));
     if(p.trackExpiry&&lots.length){
+      const validTotal=lots.reduce((s,l)=>s+num(l.qtyBase),0);
+      if(validTotal+1e-8<qtyBase&&!allowNegative)return {ok:false,error:`لا توجد كمية صالحة كافية للصنف ${p.name}.`};
       for(const lot of lots){
         if(remaining<=0)break;
         const take=Math.min(remaining,num(lot.qtyBase));
@@ -83,11 +85,11 @@
         items.push({productId,warehouseId,batchId:lot.id,batchNo:lot.batchNo||'',expiryDate:lot.expiryDate||'',qtyBase:take,unitCost,totalCost:Number((take*unitCost).toFixed(2))});
         remaining=Number((remaining-take).toFixed(6));
       }
-      if(remaining>1e-8)return {ok:false,error:`لا توجد كمية صالحة كافية للصنف ${p.name}.`};
+      if(remaining>1e-8){const unitCost=num(p.cost||0);items.push({productId,warehouseId,batchId:'',batchNo:'',expiryDate:'',qtyBase:remaining,unitCost,totalCost:Number((remaining*unitCost).toFixed(2)),direct:true,negative:true})}
       A.adjustStock(productId,warehouseId,-qtyBase);
       return {ok:true,items,costTotal:Number(items.reduce((a,x)=>a+num(x.totalCost),0).toFixed(2))};
     }
-    if(A.stockQty(productId,warehouseId)+1e-8<qtyBase)return {ok:false,error:`المخزون غير كافٍ للصنف ${p.name}.`};
+    if(A.stockQty(productId,warehouseId)+1e-8<qtyBase&&!allowNegative)return {ok:false,error:`المخزون غير كافٍ للصنف ${p.name}.`};
     A.adjustStock(productId,warehouseId,-qtyBase);
     const unitCost=num(p.cost||0);
     return {ok:true,items:[{productId,warehouseId,batchId:'',batchNo:'',expiryDate:'',qtyBase,unitCost,totalCost:Number((qtyBase*unitCost).toFixed(2)),direct:true}],costTotal:Number((qtyBase*unitCost).toFixed(2))};
@@ -137,7 +139,7 @@
     for(const [pid,need] of Object.entries(needMap)){
       const p=findProduct(pid); if(!p)continue;
       const available=p.trackExpiry?sellableQty(pid,warehouseId):A.stockQty(pid,warehouseId);
-      if(available+1e-8<need){prepared.error=`الكمية غير كافية للصنف ${p.name}. المتاح ${A.unitBreakdown(p,available)}.`;return prepared;}
+      if(available+1e-8<need&&!D().settings.allowNegative&&!A.has?.('negative_stock')){prepared.error=`الكمية غير كافية للصنف ${p.name}. المتاح ${A.unitBreakdown(p,available)}.`;return prepared;}
     }
     return prepared;
   };

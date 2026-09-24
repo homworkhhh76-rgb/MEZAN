@@ -14,7 +14,7 @@
     'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
   ];
-  const state={device:null,server:null,characteristic:null,connecting:null,printing:false,printingSaleId:''};
+  const state={device:null,server:null,characteristic:null,connecting:null,printing:false,printingSaleId:'',reconnectTimer:null,reconnectAttempts:0};
   const PRINT_GUARD_KEY='almezan_print_guard_v2',PRINT_GUARD_MS=10000;
   const D=()=>A.db;
   const support=()=>!!(navigator.bluetooth&&window.isSecureContext);
@@ -39,7 +39,8 @@
   }
   function saveDevice(device){const s=settings();s.bluetoothPrinterId=device?.id||'';s.bluetoothPrinterName=device?.name||'طابعة بلوتوث';A.saveDB?.();emit()}
   function clearConnection(){state.server=null;state.characteristic=null;emit()}
-  function onDisconnected(){clearConnection();if(settings().bluetoothAutoReconnect) setTimeout(()=>connectSaved().catch(()=>{}),1200)}
+  function scheduleReconnect(){if(!settings().bluetoothAutoReconnect||state.reconnectTimer)return;const delays=[500,1200,2500,5000];const run=()=>{state.reconnectTimer=null;if(state.device?.gatt?.connected&&state.characteristic){state.reconnectAttempts=0;return}const delay=delays[Math.min(state.reconnectAttempts,delays.length-1)];state.reconnectAttempts++;state.reconnectTimer=setTimeout(async()=>{state.reconnectTimer=null;try{await connectSaved();state.reconnectAttempts=0}catch(_){if(state.reconnectAttempts<8)scheduleReconnect()}},delay)};run()}
+  function onDisconnected(){clearConnection();scheduleReconnect()}
   async function writableCharacteristic(server,preferredService='',preferredCharacteristic=''){
     const preferredS=uuid(preferredService),preferredC=uuid(preferredCharacteristic);
     if(preferredS){
@@ -79,6 +80,7 @@
     if(state.connecting)return state.connecting;
     state.connecting=(async()=>{
       const s=settings();
+      if(state.device){try{return await connectDevice(state.device)}catch(_){clearConnection()}}
       if(!s.bluetoothPrinterId||typeof navigator.bluetooth.getDevices!=='function')throw new Error('لا توجد طابعة محفوظة يمكن إعادة الاتصال بها تلقائياً.');
       const devices=await navigator.bluetooth.getDevices(),device=devices.find(d=>d.id===s.bluetoothPrinterId)||devices.find(d=>d.name&&d.name===s.bluetoothPrinterName);
       if(!device)throw new Error('الطابعة المحفوظة غير متاحة حالياً.');
@@ -105,7 +107,7 @@
     return null
   }
   async function receiptCanvas(sale){
-    const st=settings(),width=st.printSize==='58'?384:576,pad=st.printSize==='58'?12:16,inner=width-pad*2,scale=st.printSize==='58'?.78:1;
+    const st=settings(),width=st.printSize==='58'?384:576,pad=st.printSize==='58'?12:16,inner=width-pad*2,scale=st.printSize==='58'?.95:1.16;
     const font=(size,weight=700)=>`${weight} ${Math.max(10,Math.round(size*scale))}px Arial, Tahoma, sans-serif`;
     const probe=document.createElement('canvas').getContext('2d');probe.font=font(18,700);
     const nameWidth=inner*(st.showInvoiceUnitColumn!==false?.30:(st.showInvoiceItemNumber!==false?.35:.40));let rowsHeight=0;for(const l of sale.lines||[]){rowsHeight+=Math.max(1,wrap(probe,l.productName,nameWidth).length)*Math.round(25*scale)+Math.round(12*scale)}
@@ -143,8 +145,8 @@
     return ch.writeValue(view);
   }
   async function writeBytes(bytes){
-    const ch=state.characteristic;if(!ch)throw new Error('الطابعة غير متصلة.');const android=/Android/i.test(navigator.userAgent||'');let pos=0,chunk=android?80:120;
-    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end}catch(e){if(chunk>20){chunk=20;continue}throw e}await new Promise(r=>setTimeout(r,android?9:4));if(android&&pos>0&&pos%2048<chunk)await new Promise(r=>setTimeout(r,24))}if(android)await new Promise(r=>setTimeout(r,180))
+    let ch=state.characteristic;if(!ch||!state.device?.gatt?.connected){await connectSaved();ch=state.characteristic}if(!ch)throw new Error('الطابعة غير متصلة.');const android=/Android/i.test(navigator.userAgent||'');let pos=0,chunk=android?80:120,reconnects=0;
+    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end;reconnects=0}catch(e){const msg=String(e?.message||e||'');if(chunk>20){chunk=20;continue}if(reconnects<2&&(/gatt|disconnect|network|not connected|operation/i.test(msg)||!state.device?.gatt?.connected)){reconnects++;clearConnection();await new Promise(r=>setTimeout(r,250*reconnects));await connectSaved();ch=state.characteristic;continue}throw e}await new Promise(r=>setTimeout(r,android?9:4));if(android&&pos>0&&pos%2048<chunk)await new Promise(r=>setTimeout(r,24))}if(android)await new Promise(r=>setTimeout(r,180))
   }
   function readPrintGuard(){try{return JSON.parse(localStorage.getItem(PRINT_GUARD_KEY)||'null')||null}catch(_){return null}}
   function writePrintGuard(saleId){try{localStorage.setItem(PRINT_GUARD_KEY,JSON.stringify({saleId:String(saleId||''),at:Date.now()}))}catch(_){}}
@@ -173,6 +175,8 @@
     if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const fake={id:'TEST-'+Date.now(),number:'TEST-PRINT',date:A.today(),customerName:'طباعة تجريبية',userName:A.currentUser?.()?.name||'المستخدم',branchId:A.state.activeBranchId,lines:[{productName:'اختبار الطابعة الحرارية',unitName:'حبة',qty:1,unitPrice:1,total:1}],subtotal:1,discount:0,tax:0,total:1,paid:1,due:0};const canvas=await receiptCanvas(fake);await writeBytes(rasterBytes(canvas));A.toast?.('تم إرسال ورقة الاختبار للطابعة.','success')
   }
   window.AlMezanBluetoothPrinter={support,status,connect,connectSaved,disconnect,forget,printInvoice,printInvoiceById,printTest,receiptCanvas,rasterBytes};
-  window.addEventListener('online',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>{})});
-  setTimeout(()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>{})},900);
+  window.addEventListener('online',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
+  window.addEventListener('focus',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
+  setTimeout(()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())},900);
 })();
