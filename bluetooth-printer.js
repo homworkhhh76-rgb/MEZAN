@@ -2,99 +2,47 @@
   'use strict';
   const A=window.AlMezan;
   if(!A)return;
-  const COMMON_SERVICES=[
-    '000018f0-0000-1000-8000-00805f9b34fb',
-    '0000ffe0-0000-1000-8000-00805f9b34fb',
-    '0000ff00-0000-1000-8000-00805f9b34fb',
-    '0000fff0-0000-1000-8000-00805f9b34fb',
-    '0000ae30-0000-1000-8000-00805f9b34fb',
-    '0000ae3a-0000-1000-8000-00805f9b34fb',
-    '0000af30-0000-1000-8000-00805f9b34fb',
-    '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-    'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-    '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
-  ];
-  const state={device:null,server:null,characteristic:null,connecting:null,printing:false,printingSaleId:'',reconnectTimer:null,reconnectAttempts:0};
-  const PRINT_GUARD_KEY='almezan_print_guard_v2',PRINT_GUARD_MS=10000;
   const D=()=>A.db;
+  const META_KEY='almezan_bt_printer_v7850';
+  const PRINT_GUARD_KEY='almezan_print_guard_v7850',PRINT_GUARD_MS=9000;
+  const COMMON_SERVICES=[
+    '000018f0-0000-1000-8000-00805f9b34fb','0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb','0000fff0-0000-1000-8000-00805f9b34fb',
+    '0000ae30-0000-1000-8000-00805f9b34fb','0000ae3a-0000-1000-8000-00805f9b34fb',
+    '0000af30-0000-1000-8000-00805f9b34fb','49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2','6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+  ];
+  const PREFERRED_CHARS=[
+    '0000ae01-0000-1000-8000-00805f9b34fb','0000ae03-0000-1000-8000-00805f9b34fb',
+    '0000ffe1-0000-1000-8000-00805f9b34fb','0000ff02-0000-1000-8000-00805f9b34fb',
+    '6e400002-b5a3-f393-e0a9-e50e24dcca9e','49535343-1e4d-4bd9-ba61-23c647249616'
+  ];
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  const state={device:null,server:null,characteristic:null,connecting:null,writeTail:Promise.resolve(),printing:false,printingSaleId:'',reconnectTimer:null,reconnectAttempts:0,keepAliveTimer:null,manualDisconnect:false,lastActivity:0,lastError:''};
   const support=()=>!!(navigator.bluetooth&&window.isSecureContext);
-  function uuid(v){
-    v=String(v||'').trim().toLowerCase().replace(/^0x/,'');
-    if(!v)return '';
-    if(/^[0-9a-f]{4}$/.test(v))return `0000${v}-0000-1000-8000-00805f9b34fb`;
-    if(/^[0-9a-f]{8}$/.test(v))return `${v}-0000-1000-8000-00805f9b34fb`;
-    return v;
-  }
-  function settings(){
-    const s=D()?.settings||{};
-    if(s.bluetoothServiceUuid==='18f0')s.bluetoothServiceUuid='';
-    if(!s.bluetoothPrintMode)s.bluetoothPrintMode='raster';
-    if(s.bluetoothAutoReconnect===undefined)s.bluetoothAutoReconnect=true;
-    return s;
-  }
-  function emit(){window.dispatchEvent(new CustomEvent('almezan:printer-status',{detail:status()}))}
-  function status(){
-    const s=settings();
-    return {supported:support(),connected:!!state.characteristic&&!!state.device?.gatt?.connected,deviceId:state.device?.id||s.bluetoothPrinterId||'',name:state.device?.name||s.bluetoothPrinterName||'',printing:state.printing};
-  }
-  function saveDevice(device){const s=settings();s.bluetoothPrinterId=device?.id||'';s.bluetoothPrinterName=device?.name||'طابعة بلوتوث';A.saveDB?.();emit()}
-  function clearConnection(){state.server=null;state.characteristic=null;emit()}
-  function scheduleReconnect(){if(!settings().bluetoothAutoReconnect||state.reconnectTimer)return;const delays=[500,1200,2500,5000];const run=()=>{state.reconnectTimer=null;if(state.device?.gatt?.connected&&state.characteristic){state.reconnectAttempts=0;return}const delay=delays[Math.min(state.reconnectAttempts,delays.length-1)];state.reconnectAttempts++;state.reconnectTimer=setTimeout(async()=>{state.reconnectTimer=null;try{await connectSaved();state.reconnectAttempts=0}catch(_){if(state.reconnectAttempts<8)scheduleReconnect()}},delay)};run()}
-  function onDisconnected(){clearConnection();scheduleReconnect()}
-  async function writableCharacteristic(server,preferredService='',preferredCharacteristic=''){
-    const preferredS=uuid(preferredService),preferredC=uuid(preferredCharacteristic);
-    if(preferredS){
-      try{
-        const service=await server.getPrimaryService(preferredS);
-        if(preferredC){const ch=await service.getCharacteristic(preferredC);if(ch.properties.write||ch.properties.writeWithoutResponse)return ch}
-        const chars=await service.getCharacteristics();
-        const ch=chars.find(x=>x.properties.writeWithoutResponse||x.properties.write);if(ch)return ch;
-      }catch(_){ }
-    }
-    const services=await server.getPrimaryServices();
-    for(const service of services){
-      try{
-        const chars=await service.getCharacteristics();
-        const ch=chars.find(x=>x.properties.writeWithoutResponse||x.properties.write);if(ch)return ch;
-      }catch(_){ }
-    }
-    throw new Error('تم الاتصال بالطابعة لكن لم يتم العثور على قناة طباعة قابلة للكتابة. جرّب UUID مختلفاً من إعدادات الطابعة.');
-  }
-  async function connectDevice(device){
-    if(!device)throw new Error('لم يتم اختيار طابعة.');
-    if(device.gatt?.connected&&state.characteristic)return device;
-    state.device=device;device.removeEventListener?.('gattserverdisconnected',onDisconnected);device.addEventListener?.('gattserverdisconnected',onDisconnected);
-    const server=await device.gatt.connect();state.server=server;
-    const s=settings();state.characteristic=await writableCharacteristic(server,s.bluetoothServiceUuid,s.bluetoothCharacteristicUuid);
-    saveDevice(device);emit();return device;
-  }
-  async function requestPrinter(opts={}){
-    if(!support())throw new Error('Bluetooth Web غير مدعوم في هذا المتصفح. استخدم Chrome/Edge على جهاز يدعم Web Bluetooth ومن خلال HTTPS.');
-    const s=settings(),configured=uuid(opts.serviceUuid||s.bluetoothServiceUuid),optional=[configured,...COMMON_SERVICES].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
-    const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:optional});
-    return connectDevice(device);
-  }
-  async function connectSaved(){
-    if(!support())throw new Error('Bluetooth Web غير مدعوم.');
-    if(state.device?.gatt?.connected&&state.characteristic)return state.device;
-    if(state.connecting)return state.connecting;
-    state.connecting=(async()=>{
-      const s=settings();
-      if(state.device){try{return await connectDevice(state.device)}catch(_){clearConnection()}}
-      if(!s.bluetoothPrinterId||typeof navigator.bluetooth.getDevices!=='function')throw new Error('لا توجد طابعة محفوظة يمكن إعادة الاتصال بها تلقائياً.');
-      const devices=await navigator.bluetooth.getDevices(),device=devices.find(d=>d.id===s.bluetoothPrinterId)||devices.find(d=>d.name&&d.name===s.bluetoothPrinterName);
-      if(!device)throw new Error('الطابعة المحفوظة غير متاحة حالياً.');
-      return connectDevice(device);
-    })();
-    try{return await state.connecting}finally{state.connecting=null}
-  }
-  async function connect(opts={}){
-    if(state.device?.gatt?.connected&&state.characteristic)return state.device;
-    if(opts.prompt===false)return connectSaved();
-    return requestPrinter(opts);
-  }
-  function disconnect(){try{state.device?.gatt?.disconnect()}catch(_){}clearConnection()}
-  function forget(){disconnect();const s=settings();s.bluetoothPrinterId='';s.bluetoothPrinterName='';A.saveDB?.();emit()}
+  function uuid(v){v=String(v||'').trim().toLowerCase().replace(/^0x/,'');if(!v)return'';if(/^[0-9a-f]{4}$/.test(v))return`0000${v}-0000-1000-8000-00805f9b34fb`;if(/^[0-9a-f]{8}$/.test(v))return`${v}-0000-1000-8000-00805f9b34fb`;return v}
+  function readMeta(){try{return JSON.parse(localStorage.getItem(META_KEY)||'{}')||{}}catch(_){return{}}}
+  function writeMeta(patch={}){const m={...readMeta(),...patch,updatedAt:Date.now()};try{localStorage.setItem(META_KEY,JSON.stringify(m))}catch(_){}return m}
+  function settings(){const s=D()?.settings||{};if(s.bluetoothServiceUuid==='18f0')s.bluetoothServiceUuid='';if(!s.bluetoothPrintMode)s.bluetoothPrintMode='raster';if(s.bluetoothAutoReconnect===undefined)s.bluetoothAutoReconnect=true;return s}
+  function emit(){try{window.dispatchEvent(new CustomEvent('almezan:printer-status',{detail:status()}))}catch(_){}}
+  function status(){const s=settings(),m=readMeta(),connected=!!state.device?.gatt?.connected&&!!state.characteristic;return{supported:support(),connected,deviceId:state.device?.id||m.deviceId||s.bluetoothPrinterId||'',name:state.device?.name||m.deviceName||s.bluetoothPrinterName||'',serviceUuid:String(state.characteristic?.service?.uuid||m.serviceUuid||s.bluetoothServiceUuid||''),characteristicUuid:String(state.characteristic?.uuid||m.characteristicUuid||s.bluetoothCharacteristicUuid||''),printing:state.printing,lastError:state.lastError||''}}
+  function remember(device,ch){const s=settings(),serviceUuid=String(ch?.service?.uuid||readMeta().serviceUuid||''),characteristicUuid=String(ch?.uuid||readMeta().characteristicUuid||'');s.bluetoothPrinterId=device?.id||s.bluetoothPrinterId||'';s.bluetoothPrinterName=device?.name||s.bluetoothPrinterName||'طابعة بلوتوث';if(serviceUuid)s.bluetoothServiceUuid=serviceUuid;if(characteristicUuid)s.bluetoothCharacteristicUuid=characteristicUuid;writeMeta({deviceId:s.bluetoothPrinterId,deviceName:s.bluetoothPrinterName,serviceUuid,characteristicUuid});A.saveDB?.(true,{fromSync:true});emit()}
+  function clearLive(){state.server=null;state.characteristic=null;emit()}
+  function isBtWanted(){const s=settings();return s.bluetoothAutoReconnect!==false&&(s.printerConnection==='bluetooth'||!!readMeta().deviceId)}
+  function cancelReconnect(){if(state.reconnectTimer){clearTimeout(state.reconnectTimer);state.reconnectTimer=null}}
+  function scheduleReconnect(){if(state.manualDisconnect||!isBtWanted()||state.reconnectTimer)return;const delay=[350,700,1200,2200,4000,6500][Math.min(state.reconnectAttempts,5)];state.reconnectAttempts++;state.reconnectTimer=setTimeout(async()=>{state.reconnectTimer=null;try{await connectSaved();state.reconnectAttempts=0}catch(_){if(state.reconnectAttempts<20)scheduleReconnect()}},delay)}
+  function onDisconnected(){clearLive();if(!state.manualDisconnect)scheduleReconnect()}
+  function bindDevice(device){if(!device)return;try{device.removeEventListener?.('gattserverdisconnected',onDisconnected)}catch(_){}device.addEventListener?.('gattserverdisconnected',onDisconnected)}
+  function connectionHints(opts={}){const s=settings(),m=readMeta();return{deviceId:opts.deviceId||m.deviceId||s.bluetoothPrinterId||'',deviceName:opts.deviceName||m.deviceName||s.bluetoothPrinterName||'',serviceUuid:uuid(opts.serviceUuid||m.serviceUuid||s.bluetoothServiceUuid||''),characteristicUuid:uuid(opts.characteristicUuid||m.characteristicUuid||s.bluetoothCharacteristicUuid||'')}}
+  async function characteristicFromService(service,wanted=''){let chars=[];try{chars=await service.getCharacteristics()}catch(_){return null}if(wanted){const exact=chars.find(c=>String(c.uuid).toLowerCase()===wanted&&(c.properties.writeWithoutResponse||c.properties.write));if(exact)return exact}for(const id of PREFERRED_CHARS){const c=chars.find(x=>String(x.uuid).toLowerCase()===id&&(x.properties.writeWithoutResponse||x.properties.write));if(c)return c}return chars.find(c=>c.properties.writeWithoutResponse||c.properties.write)||null}
+  async function findWritable(server,opts={}){const h=connectionHints(opts),seen=new Set(),services=[];for(const sid of [h.serviceUuid,...COMMON_SERVICES].filter(Boolean)){try{const service=await server.getPrimaryService(sid);if(service&&!seen.has(service.uuid)){seen.add(service.uuid);services.push(service)}}catch(_){}}try{for(const service of await server.getPrimaryServices())if(!seen.has(service.uuid)){seen.add(service.uuid);services.push(service)}}catch(_){}for(const service of services){const ch=await characteristicFromService(service,h.characteristicUuid);if(ch)return ch}throw Error('تم الاتصال بالطابعة لكن لم يتم العثور على قناة BLE للكتابة. أطفئ الطابعة وشغّلها مرة واحدة ثم أعد اختيارها.')}
+  async function connectDevice(device,opts={}){if(!device?.gatt)throw Error('الجهاز المختار لا يدعم اتصال GATT للطباعة.');state.manualDisconnect=false;state.device=device;bindDevice(device);if(device.gatt.connected&&state.characteristic){remember(device,state.characteristic);return device}clearLive();let server;let last;for(let attempt=0;attempt<3;attempt++){try{server=device.gatt.connected?device.gatt:await device.gatt.connect();if(server)break}catch(e){last=e;try{device.gatt.disconnect()}catch(_){}await wait(160+attempt*220)}}if(!server)throw last||Error('تعذر فتح اتصال GATT بالطابعة.');state.server=server;state.characteristic=await findWritable(server,opts);state.reconnectAttempts=0;state.lastError='';remember(device,state.characteristic);return device}
+  async function recoverSavedDevice(opts={}){const h=connectionHints(opts);if(state.device&&(state.device.id===h.deviceId||!h.deviceId))return state.device;if(typeof navigator.bluetooth.getDevices!=='function')return state.device||null;let devices=[];try{devices=await navigator.bluetooth.getDevices()}catch(_){}return devices.find(d=>h.deviceId&&d.id===h.deviceId)||devices.find(d=>h.deviceName&&d.name===h.deviceName)||devices[0]||null}
+  async function connectSaved(opts={}){if(!support())throw Error('Bluetooth Web غير مدعوم في هذا المتصفح أو الصفحة ليست HTTPS.');if(state.device?.gatt?.connected&&state.characteristic)return state.device;if(state.connecting)return state.connecting;state.connecting=(async()=>{const device=await recoverSavedDevice(opts);if(!device)throw Error('لا توجد طابعة محفوظة بإذن Bluetooth. اضغط اتصال مرة واحدة فقط لاختيار الطابعة.');return connectDevice(device,opts)})();try{return await state.connecting}finally{state.connecting=null}}
+  async function requestPrinter(opts={}){if(!support())throw Error('Bluetooth Web غير مدعوم في هذا المتصفح أو الصفحة ليست HTTPS.');const h=connectionHints(opts),optional=[h.serviceUuid,...COMMON_SERVICES].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:optional});return connectDevice(device,opts)}
+  async function connect(opts={}){if(state.device?.gatt?.connected&&state.characteristic)return state.device;if(opts.prompt===false)return connectSaved(opts);return requestPrinter(opts)}
+  function disconnect(){state.manualDisconnect=true;cancelReconnect();try{state.device?.gatt?.disconnect()}catch(_){}clearLive()}
+  function forget(){disconnect();state.device=null;const s=settings();s.bluetoothPrinterId='';s.bluetoothPrinterName='';s.bluetoothServiceUuid='';s.bluetoothCharacteristicUuid='';try{localStorage.removeItem(META_KEY)}catch(_){}A.saveDB?.(true,{fromSync:true});emit()}
   const money=v=>`${(Number(v)||0).toFixed(2)} ₪`;
   function wrap(ctx,text,maxWidth){
     const words=String(text||'').split(/\s+/).filter(Boolean),out=[];let line='';
@@ -144,39 +92,32 @@
     if(typeof ch.writeValueWithResponse==='function')return ch.writeValueWithResponse(view);
     return ch.writeValue(view);
   }
-  async function writeBytes(bytes){
-    let ch=state.characteristic;if(!ch||!state.device?.gatt?.connected){await connectSaved();ch=state.characteristic}if(!ch)throw new Error('الطابعة غير متصلة.');const android=/Android/i.test(navigator.userAgent||'');let pos=0,chunk=android?80:120,reconnects=0;
-    while(pos<bytes.length){const end=Math.min(bytes.length,pos+chunk),part=bytes.subarray(pos,end);try{await writePiece(ch,part);pos=end;reconnects=0}catch(e){const msg=String(e?.message||e||'');if(chunk>20){chunk=20;continue}if(reconnects<2&&(/gatt|disconnect|network|not connected|operation/i.test(msg)||!state.device?.gatt?.connected)){reconnects++;clearConnection();await new Promise(r=>setTimeout(r,250*reconnects));await connectSaved();ch=state.characteristic;continue}throw e}await new Promise(r=>setTimeout(r,android?9:4));if(android&&pos>0&&pos%2048<chunk)await new Promise(r=>setTimeout(r,24))}if(android)await new Promise(r=>setTimeout(r,180))
+  function transientWriteError(e){return /gatt|disconnect|network|not connected|operation|in progress|invalid state|connection|characteristic|device is no longer/i.test(String(e?.message||e||''))}
+  async function writeRawNow(input,opts={}){
+    const bytes=input instanceof Uint8Array?input:new Uint8Array(input||[]);if(!bytes.length)return true;
+    let ch=state.characteristic;if(!ch||!state.device?.gatt?.connected){await connectSaved(opts);ch=state.characteristic}if(!ch)throw Error('الطابعة غير متصلة فعلياً.');
+    const android=/Android/i.test(navigator.userAgent||'');let pos=0,chunk=Number(readMeta().chunkSize||0)||(android?60:120),reconnects=0,busyRetries=0;chunk=Math.max(20,Math.min(180,chunk));
+    while(pos<bytes.length){const part=bytes.subarray(pos,Math.min(bytes.length,pos+chunk));try{await writePiece(ch,part);pos+=part.length;reconnects=0;busyRetries=0;state.lastActivity=Date.now();if(chunk<80&&pos>600)chunk=Math.min(80,chunk+10)}catch(e){const msg=String(e?.message||e||'');if(/operation.*progress|busy/i.test(msg)&&busyRetries<5){busyRetries++;await wait(70*busyRetries);continue}if(chunk>20){chunk=Math.max(20,Math.floor(chunk/2));writeMeta({chunkSize:chunk});await wait(80);continue}if(transientWriteError(e)&&reconnects<4){reconnects++;clearLive();try{state.device?.gatt?.disconnect()}catch(_){}await wait(220*reconnects);await connectSaved(opts);ch=state.characteristic;continue}state.lastError=msg;emit();throw e}await wait(android?12:4);if(pos>0&&pos%1536<chunk)await wait(android?28:10)}
+    writeMeta({chunkSize:chunk});await wait(android?180:80);state.lastError='';emit();return true
   }
+  function writeRaw(bytes,opts={}){const job=state.writeTail.catch(()=>{}).then(()=>writeRawNow(bytes,opts));state.writeTail=job;return job}
   function readPrintGuard(){try{return JSON.parse(localStorage.getItem(PRINT_GUARD_KEY)||'null')||null}catch(_){return null}}
   function writePrintGuard(saleId){try{localStorage.setItem(PRINT_GUARD_KEY,JSON.stringify({saleId:String(saleId||''),at:Date.now()}))}catch(_){}}
-  function recentlyPrinting(saleId){const g=readPrintGuard();return !!(state.printing||state.printingSaleId===String(saleId||'')||(g&&g.saleId===String(saleId||'')&&Date.now()-Number(g.at||0)<PRINT_GUARD_MS))}
-  async function printInvoice(sale){
-    if(!sale)throw new Error('الفاتورة غير موجودة.');const s=settings();
-    const pm=window.AlMezanPrinterManager,pmSettings=pm?.settings,managedDefault=pmSettings?.defaults?.invoice;
-    if(pm?.printInvoiceById&&managedDefault&&Array.isArray(pmSettings?.printers)&&pmSettings.printers.some(p=>p.id===managedDefault)){
-      return pm.printInvoiceById(sale.id);
-    }
-    if(recentlyPrinting(sale.id))return false;
-    if(s.printerConnection!=='bluetooth'||s.printSize==='a4'||!support()){A.openInvoicePrintOnce?.(sale.id);return true}
+  function recentlyPrinting(saleId){const g=readPrintGuard(),id=String(saleId||'');return !!(state.printing||state.printingSaleId===id||(g&&g.saleId===id&&Date.now()-Number(g.at||0)<PRINT_GUARD_MS))}
+  async function printInvoice(sale,opts={}){
+    if(!sale)throw Error('الفاتورة غير موجودة.');const s=settings(),force=opts.forceBluetooth===true;
+    if(!force&&(s.printerConnection!=='bluetooth'||s.printSize==='a4'||!support())){A.openInvoicePrintOnce?.(sale.id);return true}
+    if(recentlyPrinting(sale.id)&&!opts.ignoreGuard)return false;
     state.printing=true;state.printingSaleId=String(sale.id||'');writePrintGuard(sale.id);emit();
-    try{
-      if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();
-      const canvas=await receiptCanvas(sale),bytes=rasterBytes(canvas);await writeBytes(bytes);
-      A.toast?.(`تمت طباعة ${sale.number} على ${state.device?.name||'طابعة البلوتوث'}`,'success');return true
-    }catch(e){
-      console.error(e);const msg=String(e?.message||e||'');
-      if(/لا توجد طابعة محفوظة|الطابعة المحفوظة غير متاحة|Bluetooth Web غير مدعوم/.test(msg)){A.openInvoicePrintOnce?.(sale.id);return false}
-      A.toast?.('تعذر إرسال الفاتورة للطابعة: '+msg,'error',5200);return false
-    }finally{state.printing=false;state.printingSaleId='';emit()}
+    try{await connectSaved(opts);const canvas=await receiptCanvas(sale),bytes=rasterBytes(canvas);await writeRaw(bytes,opts);A.toast?.(`تمت طباعة ${sale.number} على ${state.device?.name||'طابعة البلوتوث'}`,'success');return true}
+    catch(e){const msg=String(e?.message||e||'');state.lastError=msg;console.error('Bluetooth print failed',e);A.toast?.('تعذر إرسال الفاتورة للطابعة: '+msg,'error',6000);emit();return false}
+    finally{state.printing=false;state.printingSaleId='';emit()}
   }
-  function printInvoiceById(id){const sale=D()?.sales?.find(x=>x.id===id);return printInvoice(sale)}
-  async function printTest(){
-    if(!state.characteristic||!state.device?.gatt?.connected)await connectSaved();const fake={id:'TEST-'+Date.now(),number:'TEST-PRINT',date:A.today(),customerName:'طباعة تجريبية',userName:A.currentUser?.()?.name||'المستخدم',branchId:A.state.activeBranchId,lines:[{productName:'اختبار الطابعة الحرارية',unitName:'حبة',qty:1,unitPrice:1,total:1}],subtotal:1,discount:0,tax:0,total:1,paid:1,due:0};const canvas=await receiptCanvas(fake);await writeBytes(rasterBytes(canvas));A.toast?.('تم إرسال ورقة الاختبار للطابعة.','success')
-  }
-  window.AlMezanBluetoothPrinter={support,status,connect,connectSaved,disconnect,forget,printInvoice,printInvoiceById,printTest,receiptCanvas,rasterBytes};
-  window.addEventListener('online',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
-  window.addEventListener('focus',()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())});
-  setTimeout(()=>{if(settings().printerConnection==='bluetooth'&&settings().bluetoothAutoReconnect)connectSaved().catch(()=>scheduleReconnect())},900);
+  function printInvoiceById(id,opts={}){const sale=D()?.sales?.find(x=>x.id===id);return printInvoice(sale,opts)}
+  async function printTest(opts={}){await connectSaved(opts);const fake={id:'TEST-'+Date.now(),number:'TEST-PRINT',date:A.today(),customerName:'طباعة تجريبية',userName:A.currentUser?.()?.name||'المستخدم',branchId:A.state.activeBranchId,lines:[{productName:'اختبار الطابعة الحرارية',unitName:'حبة',qty:1,unitPrice:1,total:1}],subtotal:1,discount:0,tax:0,total:1,paid:1,due:0};const canvas=await receiptCanvas(fake);await writeRaw(rasterBytes(canvas),opts);A.toast?.('تم إرسال ورقة الاختبار والطابعة بقيت متصلة.','success');return true}
+  function ensureKeepAlive(){if(state.keepAliveTimer)return;state.keepAliveTimer=setInterval(()=>{if(document.hidden||!isBtWanted()||state.manualDisconnect)return;if(!state.device?.gatt?.connected||!state.characteristic)connectSaved().catch(()=>scheduleReconnect())},7000)}
+  window.AlMezanBluetoothPrinter={support,status,connect,connectSaved,disconnect,forget,writeRaw,printInvoice,printInvoiceById,printTest,receiptCanvas,rasterBytes};
+  for(const ev of ['online','focus'])window.addEventListener(ev,()=>{if(isBtWanted()&&!state.manualDisconnect)connectSaved().catch(()=>scheduleReconnect())});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&isBtWanted()&&!state.manualDisconnect)connectSaved().catch(()=>scheduleReconnect())});
+  ensureKeepAlive();setTimeout(()=>{if(isBtWanted())connectSaved().catch(()=>scheduleReconnect())},650);
 })();

@@ -63,7 +63,7 @@ function currentDefaultUnit(p){return A.productUnit(p,p?.defaultCashierUnitId)||
 function addVoiceLine(p,u,qty){
   if(!p||!u)return false;qty=Math.max(.00000001,num(qty)||1);const factor=Math.max(.00000001,num(u.factor)||1),need=qty*factor;
   if(!repProductAllowed(p.id)){A.toast(`الصنف ${p.name} غير موجود في مخزون المندوب.`,'warning',3000);return false}
-  if(p.trackStock!==false&&!p.useRecipe){const available=A.cashierVisualStock?.(p);if(Number.isFinite(available)&&available+1e-8<need){A.toast(`المتوفر من ${p.name} لا يكفي للكمية المطلوبة.`,'warning',3200);return false}}
+  if(p.trackStock!==false&&!p.useRecipe&&!D().settings.allowNegative&&!A.has('negative_stock')){const available=A.cashierVisualStock?.(p);if(Number.isFinite(available)&&available+1e-8<need){A.toast(`المتوفر من ${p.name} لا يكفي للكمية المطلوبة.`,'warning',3200);return false}}
   const price=A.priceForCustomer?A.priceForCustomer(p,u,pricingCustomer()):num(u.salePrice),existing=S.cart.find(x=>x.productId===p.id&&x.unitId===u.id&&num(x.unitPrice)===num(price));
   if(existing)existing.qty=num(existing.qty)+qty;else S.cart.push({id:A.uid('CART'),productId:p.id,unitId:u.id,qty,unitPrice:num(price),discount:0});
   return true;
