@@ -45,7 +45,9 @@
     const accts=[
       {id:'ACC-1510',code:'1510',name:'عجز الصندوق على الموظفين',type:'asset',parentId:'ACC-1000',level:1},
       {id:'ACC-2250',code:'2250',name:'مبيعات كاشير غير مرحلة',type:'liability',parentId:'ACC-2000',level:1},
+      {id:'ACC-3050',code:'3050',name:'رأس المال',type:'equity',parentId:'ACC-3000',level:1},
       {id:'ACC-3100',code:'3100',name:'الأرباح المحتجزة',type:'equity',parentId:'ACC-3000',level:1},
+      {id:'ACC-3150',code:'3150',name:'مسحوبات المالك',type:'equity',parentId:'ACC-3000',level:1},
       {id:'ACC-3200',code:'3200',name:'الأرصدة الافتتاحية',type:'equity',parentId:'ACC-3000',level:1},
       {id:'ACC-4210',code:'4210',name:'أرباح فروق العملة',type:'revenue',parentId:'ACC-4000',level:1},
       {id:'ACC-4220',code:'4220',name:'زيادة الصندوق',type:'revenue',parentId:'ACC-4000',level:1},

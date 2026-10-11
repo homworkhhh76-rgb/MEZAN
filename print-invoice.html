@@ -7,33 +7,33 @@
 <style>
 @page{margin:0}
 *{box-sizing:border-box}
-:root{--paper-width:80mm;--side-gutter:2mm;--print-offset-x:0mm}
-html,body{margin:0;padding:0;background:#eef1f4;color:#000;min-height:100%;font-family:Arial,Tahoma,sans-serif;direction:ltr}
-/* المعاينة والطباعة تستخدمان نفس عرض الورق. المحتوى يأخذ عرض الورقة ناقص هامش متساوٍ يميناً ويساراً. */
-.print-stage{width:100%;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:12px;direction:ltr}
-.paper{position:relative;flex:0 0 var(--paper-width);width:var(--paper-width);max-width:var(--paper-width);min-height:30mm;margin-inline:auto;background:#fff;overflow:hidden;box-shadow:0 8px 34px rgba(0,0,0,.16);direction:ltr}
-.receipt{position:relative;width:100%;max-width:100%;margin:0;padding:5mm var(--side-gutter);font-size:15px;line-height:1.45;direction:rtl;background:#fff;color:#000;font-weight:700;transform:translateX(var(--print-offset-x));transform-origin:center top}
-.receipt.size-80{--side-gutter:2mm}.receipt.size-58{--side-gutter:2mm;font-size:13px;padding-top:3mm;padding-bottom:3mm}.receipt.size-a4{--side-gutter:10mm;padding-top:10mm;padding-bottom:10mm;font-size:14px}
-table{width:100%;border-collapse:collapse}td,th{padding:3px}.r{text-align:right}.l{text-align:left}
-.receipt-logo{text-align:center;margin:0 0 6px}.receipt-logo img{display:block;margin:0 auto;object-fit:contain}.receipt-logo-small img{max-width:28mm;max-height:18mm}.receipt-logo-medium img{max-width:36mm;max-height:24mm}.receipt-logo-large img{max-width:46mm;max-height:31mm}
-.receipt-store-name{text-align:center;font-size:20px;font-weight:800;line-height:1.25;margin:2px 0 8px}.size-58 .receipt-store-name{font-size:16px;margin-bottom:6px}
-.receipt-header-table{font-weight:700;margin-bottom:8px}.receipt-header-table td{vertical-align:top}
-.receipt-bordered th,.receipt-bordered td{border:1.5px solid #000;text-align:center;font-weight:700}
-.receipt-totals{margin-top:5px;font-weight:700;font-size:15px}.size-58 .receipt-totals{font-size:13px}
-.receipt-net{margin-top:8px}.receipt-net td{padding:8px 4px;font-size:20px;font-weight:800}.receipt-net td:last-child{font-size:22px}.size-58 .receipt-net td{font-size:15px}.size-58 .receipt-net td:last-child{font-size:17px}
-.receipt-barcode{text-align:center;margin:8px auto 2px;overflow:hidden}.receipt-barcode svg{max-width:100%;height:auto}.receipt-barcode-small{max-width:65%}.receipt-barcode-medium{max-width:82%}.receipt-barcode-large{max-width:100%}
-.receipt-footer-text{text-align:center;font-weight:700;font-size:16px;margin:10px 0;white-space:pre-wrap}.size-58 .receipt-footer-text{font-size:13px}
-.receipt-footer-info{font-size:13px;direction:ltr;margin-top:5px;font-weight:700}.size-58 .receipt-footer-info{font-size:11px}
+:root{--paper-width:80mm;--side-gutter:1.8mm;--print-offset-x:0mm}
+html,body{margin:0;padding:0;background:#eef1f4;color:#000;min-height:100%;font-family:Tahoma,Arial,system-ui,-apple-system,sans-serif;direction:ltr}
+.print-stage{width:100%;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:10px;direction:ltr}
+.paper{position:relative;flex:0 0 var(--paper-width);width:var(--paper-width);max-width:var(--paper-width);min-height:30mm;margin-inline:auto;background:#fff;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.14);direction:ltr}
+.receipt{position:relative;width:100%;max-width:100%;margin:0;padding:2.2mm var(--side-gutter) 2.8mm;font-size:12.5px;line-height:1.32;direction:rtl;background:#fff;color:#000;font-weight:700;transform:translateX(var(--print-offset-x));transform-origin:center top;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.receipt.size-80{--side-gutter:1.8mm}.receipt.size-58{--side-gutter:1.35mm;font-size:10px;padding-top:1.8mm;padding-bottom:2mm}.receipt.size-a4{--side-gutter:10mm;padding-top:10mm;padding-bottom:10mm;font-size:14px}
+table{width:100%;border-collapse:collapse}td,th{padding:3px 2px}.r{text-align:right}.l{text-align:left}
+.receipt-logo{text-align:center;margin:0 0 3px}.receipt-logo img{display:block;margin:0 auto;object-fit:contain}.receipt-logo-small img{max-width:34mm;max-height:20mm}.receipt-logo-medium img{max-width:42mm;max-height:26mm}.receipt-logo-large img{max-width:50mm;max-height:31mm}.size-58 .receipt-logo-small img{max-width:28mm;max-height:16mm}.size-58 .receipt-logo-medium img{max-width:34mm;max-height:20mm}.size-58 .receipt-logo-large img{max-width:40mm;max-height:24mm}
+.receipt-store-name{text-align:center;font-size:20px;font-weight:900;line-height:1.15;margin:1px 0 3px}.size-58 .receipt-store-name{font-size:16px}
+.receipt-title{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1.4px solid #000;border-bottom:1.4px solid #000;padding:5px 0 4px;margin-top:4px;font-size:13px}.receipt-title b{font-size:14px;font-weight:900}.receipt-title span{direction:ltr;font-weight:900}.size-58 .receipt-title,.size-58 .receipt-title b{font-size:10.5px}
+.receipt-date{text-align:center;font-size:10.5px;font-weight:700;margin:3px 0;color:#000}.size-58 .receipt-date{font-size:9px}
+.receipt-header-table{font-weight:700;margin:3px 0 4px;font-size:11.5px}.receipt-header-table td{vertical-align:top;padding:2px 1px}.size-58 .receipt-header-table{font-size:9px}
+.receipt-rule{height:0;border-top:1.4px solid #000;margin:3px 0}.receipt-rule.dotted{border-top-style:dashed;margin:4px 0}
+.receipt-items{table-layout:fixed}.receipt-items th{font-weight:900;text-align:center;border-bottom:1.5px solid #000;padding:4px 1px;font-size:11.5px;line-height:1.15}.receipt-items td{text-align:center;border-bottom:1px solid #bdbdbd;padding:5px 1px;font-size:11.5px;vertical-align:middle;line-height:1.28;word-break:normal;overflow-wrap:anywhere}.receipt-items td.product-name{text-align:right;font-size:12.5px;font-weight:900;padding-right:2px}.receipt-items tbody tr:last-child td{border-bottom:0}.size-58 .receipt-items th{font-size:8.6px}.size-58 .receipt-items td{font-size:8.9px;padding:4px 1px}.size-58 .receipt-items td.product-name{font-size:9.8px}
+.receipt-extra-totals{display:flex;flex-wrap:wrap;gap:2px 10px;margin:2px 0 4px;font-size:10.5px}.receipt-extra-totals span{display:flex;gap:4px;align-items:center}.receipt-extra-totals strong{font-weight:900}.size-58 .receipt-extra-totals{font-size:8.7px}
+.receipt-payment-summary{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:4px 0;margin:3px 0}.receipt-summary-col{display:flex;flex-direction:column;gap:2px}.receipt-summary-col>div{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:24px;font-size:12px}.receipt-summary-col b{font-weight:800;white-space:nowrap}.receipt-summary-col strong{font-weight:900;direction:ltr;white-space:nowrap}.receipt-summary-col>div.strong{font-size:13px;font-weight:900}.receipt-summary-col>div.strong b,.receipt-summary-col>div.strong strong{font-weight:900}.receipt-summary-right{text-align:right}.receipt-summary-left{text-align:left}.size-58 .receipt-payment-summary{gap:0 7px}.size-58 .receipt-summary-col>div{font-size:9px;min-height:20px}.size-58 .receipt-summary-col>div.strong{font-size:9.7px}
+.receipt-barcode{text-align:center;margin:7px auto 1px;overflow:hidden}.receipt-barcode svg{max-width:100%;height:auto}.receipt-barcode-small{max-width:65%}.receipt-barcode-medium{max-width:82%}.receipt-barcode-large{max-width:100%}
+.receipt-footer-text{text-align:center;font-weight:800;font-size:11px;margin:6px 0;white-space:pre-wrap}.size-58 .receipt-footer-text{font-size:9px}
+.receipt-footer-info{font-size:9.5px;direction:ltr;margin-top:4px;font-weight:700}.size-58 .receipt-footer-info{font-size:8px}
 .print-fallback{display:none;text-align:center;padding:14px;font-family:Tahoma,Arial,sans-serif;direction:rtl}.print-fallback button{padding:10px 18px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:15px}
 @media(max-width:420px){.print-stage{padding:4px;overflow-x:auto}.paper{margin-left:auto;margin-right:auto}}
 @media print{
-  /* لا نفرض عرض body بعرض الرول: Android قد يتجاهل @page ويضعه على A4.
-     ترك مساحة الصفحة كاملة ثم توسيط ورقة الإيصال يحل الانحراف في A4 وفي 58/80mm معاً. */
-  html,body{width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important;direction:ltr!important}
-  .print-stage{display:flex!important;justify-content:center!important;align-items:flex-start!important;width:100%!important;min-width:0!important;max-width:none!important;min-height:0!important;margin:0 auto!important;padding:0!important;background:#fff!important;direction:ltr!important}
-  .paper{display:block!important;position:relative!important;flex:0 0 var(--paper-width)!important;width:var(--paper-width)!important;min-width:var(--paper-width)!important;max-width:var(--paper-width)!important;margin-left:auto!important;margin-right:auto!important;padding:0!important;box-shadow:none!important;background:#fff!important;overflow:hidden!important;direction:ltr!important}
-  .receipt{display:block!important;position:relative!important;width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important;transform:translateX(var(--print-offset-x))!important;direction:rtl!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .print-fallback{display:none!important}
+ html,body{width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important;direction:ltr!important}
+ .print-stage{display:flex!important;justify-content:center!important;align-items:flex-start!important;width:100%!important;min-width:0!important;max-width:none!important;min-height:0!important;margin:0 auto!important;padding:0!important;background:#fff!important;direction:ltr!important}
+ .paper{display:block!important;position:relative!important;flex:0 0 var(--paper-width)!important;width:var(--paper-width)!important;min-width:var(--paper-width)!important;max-width:var(--paper-width)!important;margin-left:auto!important;margin-right:auto!important;padding:0!important;box-shadow:none!important;background:#fff!important;overflow:hidden!important;direction:ltr!important}
+ .receipt{display:block!important;position:relative!important;width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important;transform:translateX(var(--print-offset-x))!important;direction:rtl!important;color:#000!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+ .receipt *{color:#000!important}.print-fallback{display:none!important}
 }
 </style>
 </head>
