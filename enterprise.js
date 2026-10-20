@@ -65,7 +65,13 @@
     return stop;
   };
 
-  A.findProductByBarcode=function(code){code=String(code||'').trim();for(const p of D().products){const u=p.units?.find(x=>String(x.barcode||'').trim()===code);if(u)return{product:p,unit:u};if(String(p.sku||'').trim()===code)return{product:p,unit:p.units?.[0]}}return null};
+  A.findProductByBarcode=function(code){
+    code=String(code||'').trim();if(!code)return null;
+    // باركود المتغير الفعال له الأولوية؛ لا نختار متغيراً محذوفاً أو مؤرشفاً.
+    const products=(D().products||[]).filter(p=>p.active!==false&&!p.retiredVariant),ordered=[...products.filter(p=>p.isVariant),...products.filter(p=>!p.isVariant&&!p.hasVariants),...products.filter(p=>!p.isVariant&&p.hasVariants)];
+    for(const p of ordered){const u=p.units?.find(x=>String(x.barcode||'').trim()===code);if(u)return{product:p,unit:u};if(String(p.sku||'').trim()===code)return{product:p,unit:p.units?.[0]}}
+    return null;
+  };
 
   A.ensureRepAccount=function(rep){if(!rep)return null;const d=D();if(rep.accountId&&d.accounts.some(a=>a.id===rep.accountId))return rep.accountId;const id='ACC-REP-'+rep.id.replace(/[^A-Z0-9-]/gi,'').slice(-18),code='25'+String(d.representatives.indexOf(rep)+1).padStart(3,'0');if(!d.accounts.some(a=>a.id===id))d.accounts.push({id,code,name:`عمولة المندوب - ${rep.name}`,type:'liability',parentId:'ACC-2500',level:2});rep.accountId=id;rep.balance=num(rep.balance);return id};
 
