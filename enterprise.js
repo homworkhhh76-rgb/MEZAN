@@ -39,7 +39,7 @@
   // v7.35 — fast, wide, autofocus barcode camera. Uses a standalone overlay so parent modals stay open.
   A.scanBarcodeCamera=function({title='مسح الباركود',onDetected,keepOpen=false}={}){
     try{S.barcodeScannerClose?.()}catch(_){}
-    let closed=false,stream=null,timer=0,busy=false,lastCode='',lastAt=0;
+    let closed=false,stream=null,timer=0,busy=false,lastCode='',lastAt=0,visibleCode='',visibleAt=0;
     const preferred=['aztec','code_128','code_39','code_93','codabar','data_matrix','ean_13','ean_8','itf','pdf417','qr_code','upc_a','upc_e'];
     const overlay=document.createElement('div');overlay.className='barcode-camera-overlay';
     overlay.innerHTML=`<section class="barcode-camera-shell" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="barcode-camera-head"><div><span class="barcode-camera-kicker">${I('barcode',14)} ماسح ذكي</span><h3>${esc(title)}</h3></div><button type="button" class="icon-button barcode-camera-close" aria-label="إغلاق">${I('close',18)}</button></div><div class="barcode-camera-stage"><video class="barcode-camera-video" playsinline webkit-playsinline autoplay muted></video><div class="barcode-scan-window"><i class="barcode-scan-line"></i><span class="scan-corner c1"></span><span class="scan-corner c2"></span><span class="scan-corner c3"></span><span class="scan-corner c4"></span></div><div class="barcode-camera-status"><span class="barcode-camera-dot"></span><b>وجّه الباركود داخل الإطار</b><small>تركيز تلقائي وقراءة فورية</small></div></div><div class="barcode-camera-fallback" hidden><div>${I('camera',22)}<b>تعذر تشغيل المسح المباشر</b><small>يمكن التقاط صورة واضحة للباركود وقراءتها بدون إدخال يدوي.</small></div><button type="button" class="btn btn-primary barcode-photo-btn">${I('camera',15)} التقاط صورة</button><input class="barcode-photo-input" type="file" accept="image/*" capture="environment" hidden></div><div class="barcode-camera-foot"><span>${I('focus',14)} تركيز مستمر</span><span>${I('scan',14)} قراءة سريعة</span>${keepOpen?`<span class="keep-scanner-pill">${I('refresh',14)} يبقى مفتوحاً</span>`:''}</div></section>`;
@@ -59,7 +59,7 @@
         const attempts=[{video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:60}},audio:false},{video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false},{video:true,audio:false}];let err=null;
         for(const constraints of attempts){try{stream=await navigator.mediaDevices.getUserMedia(constraints);break}catch(e){err=e;if(['NotAllowedError','SecurityError','NotReadableError'].includes(String(e?.name||'')))break}}
         if(!stream)throw err||new Error('CAMERA_UNAVAILABLE');S.activeStream=stream;const track=stream.getVideoTracks?.()[0];if(track)await tuneFocus(track);video.srcObject=stream;await video.play();
-        const loop=async()=>{if(closed)return;if(!busy&&video.readyState>=2){busy=true;try{const found=await detector.detect(video);if(found?.length){const vw=video.videoWidth||1,vh=video.videoHeight||1,inside=found.filter(x=>{const b=x.boundingBox;if(!b)return true;const cx=(b.x+b.width/2)/vw,cy=(b.y+b.height/2)/vh;return cx>=.04&&cx<=.96&&cy>=.08&&cy<=.92}),best=(inside.length?inside:found).slice().sort((a,b)=>((b.boundingBox?.width||0)*(b.boundingBox?.height||0))-((a.boundingBox?.width||0)*(a.boundingBox?.height||0)))[0];if(best?.rawValue)await emit(best.rawValue)}}catch(_){}finally{busy=false}}timer=setTimeout(loop,70)};loop();
+        const loop=async()=>{if(closed)return;if(!busy&&video.readyState>=2){busy=true;try{const found=await detector.detect(video);if(found?.length){const vw=video.videoWidth||1,vh=video.videoHeight||1,inside=found.filter(x=>{const b=x.boundingBox;if(!b)return true;const cx=(b.x+b.width/2)/vw,cy=(b.y+b.height/2)/vh;return cx>=.04&&cx<=.96&&cy>=.08&&cy<=.92}),best=(inside.length?inside:found).slice().sort((a,b)=>((b.boundingBox?.width||0)*(b.boundingBox?.height||0))-((a.boundingBox?.width||0)*(a.boundingBox?.height||0)))[0];if(best?.rawValue){const code=String(best.rawValue).trim(),now=Date.now();if(code&&(code!==visibleCode||now-visibleAt>1100))await emit(code);visibleCode=code;visibleAt=now;}else if(Date.now()-visibleAt>700)visibleCode='';}else if(Date.now()-visibleAt>700)visibleCode='';}catch(_){}finally{busy=false}}timer=setTimeout(loop,70)};loop();
       }catch(error){try{stream?.getTracks().forEach(t=>t.stop())}catch(_){}S.activeStream=null;await startPhotoFallback(detector)}
     })();
     return stop;
@@ -69,7 +69,14 @@
     code=String(code||'').trim();if(!code)return null;
     // باركود المتغير الفعال له الأولوية؛ لا نختار متغيراً محذوفاً أو مؤرشفاً.
     const products=(D().products||[]).filter(p=>p.active!==false&&!p.retiredVariant),ordered=[...products.filter(p=>p.isVariant),...products.filter(p=>!p.isVariant&&!p.hasVariants),...products.filter(p=>!p.isVariant&&p.hasVariants)];
-    for(const p of ordered){const u=p.units?.find(x=>String(x.barcode||'').trim()===code);if(u)return{product:p,unit:u};if(String(p.sku||'').trim()===code)return{product:p,unit:p.units?.[0]}}
+    // Priority: scanned child variation and its exact unit, then ordinary products.
+    // Includes historical variants with a product-level barcode but no unit barcode.
+    for(const p of ordered){
+      const u=p.units?.find(x=>String(x.barcode||'').trim()===code);
+      if(u)return{product:p,unit:u};
+      if(String(p.barcode||'').trim()===code&&p.units?.length)return{product:p,unit:p.units[0]};
+      if(String(p.sku||'').trim()===code&&p.units?.length)return{product:p,unit:p.units[0]};
+    }
     return null;
   };
 

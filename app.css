@@ -2106,3 +2106,58 @@ button,input,select,textarea{font-family:inherit}
 .w30-variant-barcode{display:flex;align-items:center;gap:5px;min-width:175px}
 .w30-variant-barcode input{min-width:125px;width:100%}.w30-variant-barcode .icon-button{flex:0 0 36px;width:36px;height:36px}
 @media(max-width:650px){.w30-chart{padding:10px}.w30-row{gap:6px;flex-wrap:wrap;padding-inline-start:calc(4px + var(--level)*7px)}.w30-title{flex-basis:calc(100% - 135px)}.w30-title b{font-size:12px}.w30-balance{min-width:80px;font-size:12px}.w30-tools{margin-inline-start:30px}.w30-summary{gap:6px;padding:12px}.w30-summary b{font-size:15px}.w30-journal-row{grid-template-columns:1fr 1fr 36px}.w30-journal-row>.field:first-child{grid-column:1/-1}.w30-code{font-size:10px}.w30-title small{font-size:9px}.w30-tools button{width:30px;height:30px}}
+
+/* v7.84.16 — easy-access variant barcodes in product editor */
+.variant-visible-toggle{display:flex;align-items:center;gap:11px;padding:13px 15px;border:1px solid #abc8ed;border-radius:12px;background:linear-gradient(120deg,#f0f7ff,#f9fcff);cursor:pointer;color:#193d73}
+.variant-visible-toggle input{width:19px;height:19px;accent-color:#2268c6;flex:none}
+.variant-visible-toggle>span{display:grid;gap:4px}.variant-visible-toggle strong{font-size:12px}.variant-visible-toggle small{font-size:10px;color:#426286;line-height:1.6}
+.variant-matrix-table .w30-variant-barcode{min-width:185px}.variant-matrix-table .variant-barcode{min-width:0;width:100%;direction:ltr;text-align:center;font-family:inherit;font-weight:650;letter-spacing:.3px}
+.variant-matrix-table .scan-variant-barcode{border:1px solid #a4c5ee;background:#e9f3ff;color:#1457b1;border-radius:8px}
+@media(max-width:620px){.variant-visible-toggle{padding:11px 12px}.variant-matrix-table .w30-variant-barcode{min-width:160px}}
+
+/* v7.84.17 — readable variable barcode cards, no horizontal table on phones */
+.variant-section{border:1px solid #d7e2ef;border-radius:14px;background:#fff;padding:13px!important;min-width:0}
+.variant-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px!important}
+.variant-section-heading h4{margin:0;font-size:14px}
+.variant-mode-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;color:#38536e;font-size:11px;font-weight:700}
+.variant-mode-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.variant-switch-track{position:relative;display:inline-block;width:35px;height:21px;background:#bec9d5;border-radius:30px;transition:background .2s}
+.variant-switch-track::before{content:"";position:absolute;top:3px;right:3px;width:15px;height:15px;border-radius:50%;background:white;box-shadow:0 1px 3px #0002;transition:transform .2s}
+.variant-mode-switch input:checked+.variant-switch-track{background:#2268c6}
+.variant-mode-switch input:checked+.variant-switch-track::before{transform:translateX(-14px)}
+.variant-mode-switch input:focus-visible+.variant-switch-track{outline:2px solid #2268c6;outline-offset:2px}
+#variantEditor[hidden]{display:none!important}
+.variant-axes-head{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:9px}
+.variant-axes-head strong{font-size:12px}
+.variant-axes-head .btn{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:7px 10px}
+.variant-axis-row{display:grid!important;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr) 37px!important;column-gap:7px;align-items:end;margin-bottom:8px;min-width:0}
+.variant-axis-row .field:nth-child(2){grid-column:auto!important}
+.variant-axis-row .field{min-width:0;margin:0}
+.variant-axis-row .field input{width:100%;min-width:0;height:42px;padding:8px;box-sizing:border-box;font-size:12px}
+.variant-axis-row .field span{font-size:11px;white-space:nowrap}
+.variant-axis-row .remove-variant-axis{width:37px;height:42px;align-self:end;border:1px solid #f0d0d0;color:#a64242;background:#fff6f5;border-radius:9px}
+.variant-matrix-toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:14px 0 11px}
+.variant-matrix-toolbar .muted{font-size:10px}
+.variant-generate-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:41px!important;padding:8px 13px!important;font-size:12px;white-space:nowrap}
+.variant-generate-icon{display:inline-flex;align-items:center;justify-content:center;line-height:0}
+.variant-generate-icon svg{stroke-width:2.15px}
+.variant-card-list{display:grid;gap:10px;min-width:0}
+.variant-barcode-card{display:grid;gap:10px;min-width:0;background:#f8fbff;border:1px solid #cfdfee;border-radius:13px;padding:12px}
+.variant-card-head,.variant-card-heading{display:flex;align-items:center;gap:8px;min-width:0}
+.variant-card-head{justify-content:space-between}
+.variant-card-heading b{font-size:12px;overflow-wrap:anywhere;color:#16365d}
+.variant-card-number{display:inline-flex;align-items:center;justify-content:center;flex:0 0 25px;height:25px;border-radius:9px;background:#dcecff;color:#1652a6;font-weight:800;font-size:12px}
+.variant-card-status{background:#e9eff5;color:#566c83;padding:4px 9px;border-radius:9px;font-size:10px;white-space:nowrap}
+.variant-card-barcode-label{display:flex;align-items:center;gap:5px;color:#24466c;font-size:12px;font-weight:700}
+.variant-barcode-entry{display:grid!important;grid-template-columns:minmax(0,1fr) 48px!important;gap:7px;min-width:0;align-items:stretch}
+.variant-barcode-entry .variant-barcode{min-width:0;width:100%;height:46px;box-sizing:border-box;border:1px solid #b4cbe2;background:#fff;border-radius:10px;font-size:13px;font-weight:750;letter-spacing:.2px;text-align:center}
+.variant-barcode-entry .scan-variant-barcode{width:48px;height:46px;display:inline-flex;justify-content:center;align-items:center;border:1px solid #2169c8;border-radius:10px;background:#2169c8;color:white;box-shadow:0 2px 5px #2169c826}
+.variant-card-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.variant-card-detail{min-width:0;border-top:1px solid #dce7f3;padding-top:9px}
+.variant-card-field-title{display:block;font-size:11px;color:#4b6680;font-weight:700;margin-bottom:6px}
+.variant-barcode-card .variant-unit-price-grid,.variant-barcode-card .variant-unit-opening-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(90px,100%),1fr));gap:7px;min-width:0}
+.variant-barcode-card .variant-unit-price-grid label,.variant-barcode-card .variant-unit-opening-grid label{min-width:0}
+.variant-barcode-card .variant-unit-price-grid input,.variant-barcode-card .variant-unit-opening-grid input{min-width:0!important;width:100%;box-sizing:border-box}
+.variant-card-stock{font-size:11px;color:#51647c}
+@media(max-width:650px){.variant-section{padding:10px!important}.variant-axis-row{grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr) 36px!important;gap:5px}.variant-axis-row .field input{font-size:11px;padding:6px}.variant-axis-row .remove-variant-axis{width:36px}.variant-card-details{grid-template-columns:1fr}.variant-barcode-card{padding:10px}.variant-generate-button{flex:1 1 auto}.variant-matrix-toolbar .muted{flex:1 1 auto;text-align:start}}
+@media(max-width:340px){.variant-axis-row{grid-template-columns:minmax(0,.83fr) minmax(0,1.17fr) 32px!important;gap:4px}.variant-axis-row .remove-variant-axis{width:32px}.variant-axis-row .field span{font-size:10px}}
