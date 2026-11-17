@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <base href="./"><meta name="theme-color" content="#10243b">
-<title>إدارة الميزان — القاعدة الأم</title><link rel="icon" href="app-icon-192.png?v=7855"><link rel="manifest" href="manifest.webmanifest?v=7855">
+<title>إدارة الميزان — القاعدة الأم</title><link rel="icon" href="app-icon-192.png?v=7900"><link rel="manifest" href="manifest.webmanifest?v=7900">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -21,10 +21,10 @@
 <div class="modal-root" id="databaseModal"><div class="modal"><div class="modal-head"><h3>إضافة قاعدة شركة</h3><button class="close" data-close>×</button></div><form id="databaseForm"><div class="modal-body"><input type="hidden" name="id"><div class="form-grid"><div class="field"><label>اسم القاعدة</label><input name="name" required placeholder="مثال: قاعدة غزة 01"></div><div class="field"><label>رابط Turso</label><input name="databaseURL" dir="ltr" required placeholder="libsql://....turso.io"></div><div class="field full"><label>توكن القاعدة</label><input name="authToken" dir="ltr" type="password" required placeholder="Turso auth token"></div></div></div><div class="modal-foot"><button class="btn green" type="submit">حفظ القاعدة</button><button class="btn" type="button" data-close>إلغاء</button></div></form></div></div>
 <div class="modal-root" id="companyModal"><div class="modal"><div class="modal-head"><h3 id="companyModalTitle">شركة جديدة</h3><button class="close" data-close>×</button></div><form id="companyForm"><div class="modal-body"><input type="hidden" name="id"><div class="form-grid"><div class="field"><label>اسم الشركة</label><input name="companyName" required></div><div class="field"><label>مفتاح الشركة</label><div class="secret-row"><input name="companyKey" dir="ltr" required><button class="btn" type="button" id="generateCompanyKey">توليد</button></div></div><div class="field"><label>قاعدة الشركة</label><select name="databaseId" required></select></div><div class="field"><label>اسم المدير</label><input name="managerName" required value="مدير النظام"></div><div class="field"><label>الخطة</label><select name="plan"><option value="lifetime">مدى الحياة</option><option value="pro">Pro</option><option value="custom">مخصص</option></select></div><div class="field"><label>الحالة</label><select name="status"><option value="active">نشط</option><option value="stopped">موقوف</option></select></div><div class="field"><label>تاريخ البدء</label><input name="startAt" type="date"></div><div class="field"><label>تاريخ الانتهاء — اتركه فارغاً لمدى الحياة</label><input name="endAt" type="date"></div></div><div class="status">ملف مدير الشركة يحتوي بشكل مشفر على بيانات قاعدة الشركة ومعرف الحساب. عند إصدار ملف مدير جديد من زر «تجديد الملف» يتم إلغاء صلاحية الملفات السابقة بعد المزامنة.</div></div><div class="modal-foot"><button class="btn green" type="submit">حفظ ونشر إلى قاعدة الشركة</button><button class="btn" type="button" data-close>إلغاء</button></div></form></div></div>
 <div class="toast" id="toast"></div>
-<script src="activation-runtime.js?v=7855"></script><script src="master-admin.js?v=7855"></script>
-  <script src="enterprise-v755.js?v=7855"></script>
-  <script src="enterprise-v757.js?v=7855"></script>
-  <script src="enterprise-v758.js?v=7855"></script>
-  <script src="printer-manager-v782.js?v=7855"></script>
-  <script src="enterprise-v783.js?v=7855"></script>
+<script src="activation-runtime.js?v=7900"></script><script src="master-admin.js?v=7900"></script>
+  <script src="enterprise-v755.js?v=7900"></script>
+  <script src="enterprise-v757.js?v=7900"></script>
+  <script src="enterprise-v758.js?v=7900"></script>
+  <script src="printer-manager-v782.js?v=7900"></script>
+  <script src="enterprise-v783.js?v=7900"></script>
 </body></html>

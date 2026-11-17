@@ -33,6 +33,7 @@ function applyFontScale(root=document,scale=fontScale){
   const range=$('#fontScaleRange');if(range&&Number(range.value)!==scale)range.value=String(scale);
   return scale;
 }
+window.addEventListener('almezan:data-synced',()=>{const v=Number(D().settings.uiFontScale);if(v>=FONT_MIN&&v<=FONT_MAX){localStorage.setItem(FONT_KEY,String(v));applyFontScale(document,v)}applyBranding()});
 function setFontScale(next){fontScale=Math.max(FONT_MIN,Math.min(FONT_MAX,Number(next)||1));localStorage.setItem(FONT_KEY,String(fontScale));applyFontScale(document,fontScale)}
 A.applyLocalFontScale=applyFontScale;A.setLocalFontScale=setFontScale;A.getLocalFontScale=()=>fontScale;
 

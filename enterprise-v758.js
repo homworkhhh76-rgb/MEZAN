@@ -86,7 +86,7 @@
 
   /* 2) Printing that never boots the login screen: send a prepared receipt to a dedicated print-only HTML page. */
   let printWindow=null,printLock={id:'',at:0};
-  function receiptHtml758(x){
+  function receiptHtml758(x){if(D().settings?.printSize!=='a4'&&window.MezanReceiptData)return W47Thermal.html(window.MezanReceiptData(x),D().settings?.printSize==='58'?'58mm':'80mm');
     const st=D().settings||{},company=D().company||{},plain=v=>(Number(v)||0).toFixed(2),qtyTotal=(x.lines||[]).reduce((a,l)=>a+num(l.qty),0);
     const logo=st.showInvoiceLogo!==false?`<div class="receipt-logo receipt-logo-${esc(st.invoiceLogoSize||'small')}"><img src="${esc(A.systemLogoSrc?.()||'brand-logo.png')}" alt=""></div>`:'';
     const storeName=st.showInvoiceStoreName!==false&&company.name?`<div class="receipt-store-name">${esc(company.name)}</div>`:'';
